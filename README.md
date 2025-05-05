@@ -74,7 +74,6 @@ net2 (2, 100, 200) (2, 100, 201) (2, 100, 202) ...
 
 2. Run the router with your input file:
    ```
-   # Replace with the actual command to run the router
    ./maze_router input.txt
    ```
 
