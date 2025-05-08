@@ -4,9 +4,13 @@
 #include <vector>
 #include <sstream>
 #include <queue>
+#include <tuple>
+#include <climits>
 using namespace std;
 vector<vector<vector<int>>> grid;
 
+// Forward declaration
+void route_net(vector<vector<vector<int>>>& grid);
 
 struct Point {
     int x, y;
@@ -63,8 +67,10 @@ void fill_nets(string s) {
         }
     }
     for (const auto& pin : pins) {
-        auto [layer, x, y] = pin;
-        grid[layer][x][y] = 1;
+        int layer = get<0>(pin);
+        int x = get<1>(pin);
+        int y = get<2>(pin);
+        grid[layer-1][x][y] = 1;
     }
     
     route_net(grid);
@@ -72,7 +78,7 @@ void fill_nets(string s) {
         for (int i = 0; i < grid[layer].size(); ++i) {
             for (int j = 0; j < grid[layer][i].size(); ++j) {
                 if (grid[layer][i][j] == 2) {
-                    grid[layer][i][j] = -1;
+                    grid[layer][i][j] = 2;
                 }
             }
         }
@@ -93,8 +99,6 @@ void route_net(vector<vector<vector<int>>>& grid) {
 
     for (size_t i = 0; i < pins.size() - 1; ++i) {
         vector<vector<int>> cost_grid = grid[0];
-        
-        // Initialize cost grid: preserve obstacles (-1) and routed paths (2)
         for (int x = 0; x < cost_grid.size(); ++x) {
             for (int y = 0; y < cost_grid[x].size(); ++y) {
                 if (cost_grid[x][y] != -1 && cost_grid[x][y] != 2) {
