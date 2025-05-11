@@ -32,6 +32,8 @@ void readfile(std::string filename);
 void print_grid();
 void visualize_grid();  // Optional box-style output
 
+extern std::vector<std::vector<std::string>> net_name_grid;
+
 #endif // FUNCTIONS_H
 
 

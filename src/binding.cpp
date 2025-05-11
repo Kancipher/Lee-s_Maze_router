@@ -10,4 +10,8 @@ PYBIND11_MODULE(routing, m) {
     m.def("get_grid", []() {
         return grid;
     }, "Get the current routing grid");
+
+    m.def("get_net_name_grid", []() {
+        return net_name_grid;
+    }, "Get the net name grid for visualization");
 }

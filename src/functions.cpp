@@ -11,6 +11,8 @@ using namespace std;
 // Global grid and net storage
 vector<vector<vector<int>>> grid;
 vector<vector<tuple<int, int, int>>> all_nets; // Store pins of all nets
+vector<string> net_names; // Store net names in order
+vector<vector<string>> net_name_grid; // Parallel to grid[0], stores net name for each routed cell
 
 struct Point {
     int x, y;
@@ -44,8 +46,12 @@ tuple<int, int, int> parse_pin(const string& pin_str) {
 }
 
 void fill_nets(string s) {
-    size_t net_pos = s.find("net");
-    string net_name = s.substr(net_pos + 4, s.find('(') - net_pos - 4);
+size_t paren_pos = s.find('(');
+string net_name = s.substr(0, paren_pos);
+// Remove trailing spaces
+net_name.erase(net_name.find_last_not_of(" \t\r\n") + 1);
+std::cout << "Net name: " << net_name << std::endl;
+    net_names.push_back(net_name); // Track net name order
 
     stringstream ss(s.substr(s.find('(')));
     string pin_str;
@@ -67,109 +73,119 @@ void fill_nets(string s) {
     all_nets.push_back(pins); // Just store pins for later routing
 }
 
-void route_net(vector<vector<vector<int>>>& grid) {
-    vector<Point> pins;
-    for (int i = 0; i < grid[0].size(); ++i) {
-        for (int j = 0; j < grid[0][i].size(); ++j) {
-            if (grid[0][i][j] == 1) {
-                pins.push_back(Point(i, j, 0));
+void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const string& net_name) {
+    // Prepare cost grid
+    vector<vector<int>> cost_grid = grid[0];
+    for (int x = 0; x < cost_grid.size(); ++x) {
+        for (int y = 0; y < cost_grid[x].size(); ++y) {
+            if (grid[0][x][y] == 0 || grid[0][x][y] == 1) {
+                cost_grid[x][y] = INT_MAX;
+            }
+            else {
+                cost_grid[x][y] = -1; // Block obstacles and other paths
             }
         }
     }
-    if (pins.size() < 2) return;
 
-    for (size_t i = 0; i < pins.size() - 1; ++i) {
-        vector<vector<int>> cost_grid = grid[0];
-        for (int x = 0; x < cost_grid.size(); ++x) {
-            for (int y = 0; y < cost_grid[x].size(); ++y) {
-                if (grid[0][x][y] == 0 || grid[0][x][y] == 1) {
-                    cost_grid[x][y] = INT_MAX;
-                }
-                else {
-                    cost_grid[x][y] = -1; // Block obstacles and other paths
-                }
-            }
+    queue<Point> q;
+    q.push(src);
+    cost_grid[src.x][src.y] = 0;
+
+    while (!q.empty()) {
+        Point current = q.front(); q.pop();
+        if (current.x == dst.x && current.y == dst.y) break;
+
+        if (current.x > 0 && cost_grid[current.x - 1][current.y] == INT_MAX) {
+            cost_grid[current.x - 1][current.y] = current.cost + 1;
+            q.push(Point(current.x - 1, current.y, current.cost + 1));
         }
-
-        queue<Point> q;
-        q.push(pins[i]);
-        cost_grid[pins[i].x][pins[i].y] = 0;
-
-        while (!q.empty()) {
-            Point current = q.front(); q.pop();
-            if (current.x == pins[i + 1].x && current.y == pins[i + 1].y) break;
-
-            if (current.x > 0 && cost_grid[current.x - 1][current.y] == INT_MAX) {
-                cost_grid[current.x - 1][current.y] = current.cost + 1;
-                q.push(Point(current.x - 1, current.y, current.cost + 1));
-            }
-            if (current.x < cost_grid.size() - 1 && cost_grid[current.x + 1][current.y] == INT_MAX) {
-                cost_grid[current.x + 1][current.y] = current.cost + 1;
-                q.push(Point(current.x + 1, current.y, current.cost + 1));
-            }
-            if (current.y > 0 && cost_grid[current.x][current.y - 1] == INT_MAX) {
-                cost_grid[current.x][current.y - 1] = current.cost + 2;
-                q.push(Point(current.x, current.y - 1, current.cost + 2));
-            }
-            if (current.y < cost_grid[0].size() - 1 && cost_grid[current.x][current.y + 1] == INT_MAX) {
-                cost_grid[current.x][current.y + 1] = current.cost + 2;
-                q.push(Point(current.x, current.y + 1, current.cost + 2));
-            }
+        if (current.x < cost_grid.size() - 1 && cost_grid[current.x + 1][current.y] == INT_MAX) {
+            cost_grid[current.x + 1][current.y] = current.cost + 1;
+            q.push(Point(current.x + 1, current.y, current.cost + 1));
         }
-
-        Point current = pins[i + 1];
-        while (current.x != pins[i].x || current.y != pins[i].y) {
-            grid[0][current.x][current.y] = 2;
-            int min_cost = INT_MAX;
-            Point next = current;
-
-            if (current.x > 0 && cost_grid[current.x - 1][current.y] != -1 && cost_grid[current.x - 1][current.y] < min_cost)
-                next = Point(current.x - 1, current.y, min_cost = cost_grid[current.x - 1][current.y]);
-            if (current.x < cost_grid.size() - 1 && cost_grid[current.x + 1][current.y] != -1 && cost_grid[current.x + 1][current.y] < min_cost)
-                next = Point(current.x + 1, current.y, min_cost = cost_grid[current.x + 1][current.y]);
-            if (current.y > 0 && cost_grid[current.x][current.y - 1] != -1 && cost_grid[current.x][current.y - 1] < min_cost)
-                next = Point(current.x, current.y - 1, min_cost = cost_grid[current.x][current.y - 1]);
-            if (current.y < cost_grid[0].size() - 1 && cost_grid[current.x][current.y + 1] != -1 && cost_grid[current.x][current.y + 1] < min_cost)
-                next = Point(current.x, current.y + 1, min_cost = cost_grid[current.x][current.y + 1]);
-
-            current = next;
+        if (current.y > 0 && cost_grid[current.x][current.y - 1] == INT_MAX) {
+            cost_grid[current.x][current.y - 1] = current.cost + 2;
+            q.push(Point(current.x, current.y - 1, current.cost + 2));
         }
+        if (current.y < cost_grid[0].size() - 1 && cost_grid[current.x][current.y + 1] == INT_MAX) {
+            cost_grid[current.x][current.y + 1] = current.cost + 2;
+            q.push(Point(current.x, current.y + 1, current.cost + 2));
+        }
+    }
+
+    Point current = dst;
+    while (current.x != src.x || current.y != src.y) {
+        grid[0][current.x][current.y] = 2;
+        net_name_grid[current.x][current.y] = net_name; // Mark net name for this cell
+        int min_cost = INT_MAX;
+        Point next = current;
+
+        if (current.x > 0 && cost_grid[current.x - 1][current.y] != -1 && cost_grid[current.x - 1][current.y] < min_cost)
+            next = Point(current.x - 1, current.y, min_cost = cost_grid[current.x - 1][current.y]);
+        if (current.x < cost_grid.size() - 1 && cost_grid[current.x + 1][current.y] != -1 && cost_grid[current.x + 1][current.y] < min_cost)
+            next = Point(current.x + 1, current.y, min_cost = cost_grid[current.x + 1][current.y]);
+        if (current.y > 0 && cost_grid[current.x][current.y - 1] != -1 && cost_grid[current.x][current.y - 1] < min_cost)
+            next = Point(current.x, current.y - 1, min_cost = cost_grid[current.x][current.y - 1]);
+        if (current.y < cost_grid[0].size() - 1 && cost_grid[current.x][current.y + 1] != -1 && cost_grid[current.x][current.y + 1] < min_cost)
+            next = Point(current.x, current.y + 1, min_cost = cost_grid[current.x][current.y + 1]);
+
+        current = next;
     }
 }
 
 void route_all_nets() {
     vector<tuple<int, int, int>> all_pins; // Store all start and end pins
-
-    for (const auto& net_pins : all_nets) {
-        // Clear previous pin markers
+    net_name_grid = vector<vector<string>>(grid[0].size(), vector<string>(grid[0][0].size(), "")); // Reset net_name_grid
+    for (size_t net_id = 0; net_id < all_nets.size(); ++net_id) {
+        const auto& net_pins = all_nets[net_id];
+        const string& net_name = net_names[net_id];
+        // Save original pin locations
+        vector<pair<int, int>> other_pins;
         for (int x = 0; x < grid[0].size(); ++x) {
             for (int y = 0; y < grid[0][0].size(); ++y) {
-                if (grid[0][x][y] == 1) grid[0][x][y] = 0;
+                // If this is a pin and not in the current net, treat as obstacle
+                bool is_in_current_net = false;
+                for (const auto& pin : net_pins) {
+                    int px = get<1>(pin);
+                    int py = get<2>(pin);
+                    if (x == px && y == py) {
+                        is_in_current_net = true;
+                        break;
+                    }
+                }
+                if (grid[0][x][y] == 1 && !is_in_current_net) {
+                    grid[0][x][y] = -1;
+                    other_pins.push_back({x, y});
+                }
             }
         }
 
         if (net_pins.size() >= 2) {
-            auto src = net_pins.front();
-            auto dst = net_pins.back();
-            int src_layer = get<0>(src) - 1, sx = get<1>(src), sy = get<2>(src);
-            int dst_layer = get<0>(dst) - 1, dx = get<1>(dst), dy = get<2>(dst);
+            for (size_t i = 0; i < net_pins.size() - 1; ++i) {
+                auto src = net_pins[i];
+                auto dst = net_pins[i + 1];
+                int src_layer = get<0>(src) - 1, sx = get<1>(src), sy = get<2>(src);
+                int dst_layer = get<0>(dst) - 1, dx = get<1>(dst), dy = get<2>(dst);
 
-            if (grid[src_layer][sx][sy] != -1 && grid[dst_layer][dx][dy] != -1) {
-                grid[src_layer][sx][sy] = 1;
-                grid[dst_layer][dx][dy] = 1;
-                all_pins.push_back(src);
-                all_pins.push_back(dst);
-                route_net(grid);
+                // Only route if both pins are not obstacles
+                if (grid[src_layer][sx][sy] != -1 && grid[dst_layer][dx][dy] != -1) {
+                    grid[src_layer][sx][sy] = 1;
+                    grid[dst_layer][dx][dy] = 1;
+                    all_pins.push_back(src);
+                    all_pins.push_back(dst);
+                    Point src_point(sx, sy, 0);
+                    Point dst_point(dx, dy, 0);
+                    route_net(grid, src_point, dst_point, net_name);
+                } else {
+                    cout << "Skipping net segment due to obstacle at pin location.\n";
+                }
             }
-            else {
-                cout << "Skipping net due to obstacle at pin location.\n";
-            }
-
-            all_pins.push_back(src);
-            all_pins.push_back(dst);
         }
 
-        route_net(grid);
+        // Restore other pins
+        for (const auto& p : other_pins) {
+            grid[0][p.first][p.second] = 1;
+        }
     }
 
     for (const auto& pin : all_pins) {
@@ -177,6 +193,15 @@ void route_all_nets() {
         int x = get<1>(pin);
         int y = get<2>(pin);
         grid[layer][x][y] = 1;
+    }
+    // Restore all pins for all nets
+    for (const auto& net_pins : all_nets) {
+        for (const auto& pin : net_pins) {
+            int layer = get<0>(pin) - 1;
+            int x = get<1>(pin);
+            int y = get<2>(pin);
+            grid[layer][x][y] = 1;
+        }
     }
 }
 
