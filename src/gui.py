@@ -3,9 +3,16 @@ import pygame
 from collections import defaultdict
 from collections import deque
 import sys
+import argparse
 
-# Read grid from C++
-routing.readfile("../MS1_TestCases/Testcase1/input.txt")
+parser = argparse.ArgumentParser(description='Visualize routing grid from input file')
+parser.add_argument('input_file', help='Path to the input file')
+args = parser.parse_args()
+routing.readfile(args.input_file)
+
+
+
+# routing.readfile("../MS1_TestCases/Testcase1/input.txt")
 grid = routing.get_grid()[0]  # Visualize Layer 1
 net_name_grid = routing.get_net_name_grid()  # 2D array of net names
 
