@@ -5,7 +5,7 @@ from collections import deque
 import sys
 
 # Read grid from C++
-routing.readfile("../MS1_TestCases/Testcase3/input.txt")
+routing.readfile("../MS1_TestCases/Testcase1/input.txt")
 grid = routing.get_grid()[0]  # Visualize Layer 1
 net_name_grid = routing.get_net_name_grid()  # 2D array of net names
 

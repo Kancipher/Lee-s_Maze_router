@@ -1,8 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"C:/Users/Omar Ganna/AUC/Lee-s_Maze_router/src/build/cmake_install.cmake",
-		"C:/Users/Omar Ganna/AUC/Lee-s_Maze_router/src/build/pybind11/cmake_install.cmake"
-	],
-	"Parallel" : false
-}
