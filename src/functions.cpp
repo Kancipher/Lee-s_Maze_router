@@ -15,9 +15,9 @@ vector<string> net_names; // Store net names in order
 vector<vector<string>> net_name_grid; // Parallel to grid[0], stores net name for each routed cell
 
 struct Point {
-    int x, y;
+    int l,x, y;
     int cost;
-    Point(int x, int y, int c) : x(x), y(y), cost(c) {}
+    Point(int l, int x, int y, int c) : l(l), x(x), y(y), cost(c) {}
 };
 
 // Utility Functions
@@ -88,66 +88,88 @@ std::cout << "Net name: " << net_name << std::endl;
 
 void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const string& net_name) {
     // Prepare cost grid
-    vector<vector<int>> cost_grid = grid[0];
-    for (int x = 0; x < cost_grid.size(); ++x) {
-        for (int y = 0; y < cost_grid[x].size(); ++y) {
-            if (grid[0][x][y] == 0) {
-                cost_grid[x][y] = INT_MAX;
-            }
-            else {
-                cost_grid[x][y] = -1; // Block obstacles, pins, and other paths
+    vector<vector<vector<int>>> cost_grid = grid;
+    for (int l = 0; l < 2; ++l) {
+        for (int x = 0; x < cost_grid[l].size(); ++x) {
+            for (int y = 0; y < cost_grid[l][x].size(); ++y) {
+                if (grid[l][x][y] == 0) {
+                    cost_grid[l][x][y] = INT_MAX;
+                }
+                else {
+                    cost_grid[l][x][y] = -1; // Block obstacles, pins, and other paths
+                }
             }
         }
     }
 
     // Mark source and destination as valid for routing
-    cost_grid[src.x][src.y] = INT_MAX;
-    cost_grid[dst.x][dst.y] = INT_MAX;
+    cost_grid[src.l][src.x][src.y] = INT_MAX;
+    cost_grid[dst.l][dst.x][dst.y] = INT_MAX;
 
     queue<Point> q;
     q.push(src);
-    cost_grid[src.x][src.y] = 0;
+    cost_grid[src.l][src.x][src.y] = 0;
 
     while (!q.empty()) {
         Point current = q.front(); q.pop();
-        if (current.x == dst.x && current.y == dst.y) break;
+        if (current.l == dst.l && current.x == dst.x && current.y == dst.y) break;
 
-        if (current.x > 0 && cost_grid[current.x - 1][current.y] == INT_MAX) {
-            cost_grid[current.x - 1][current.y] = current.cost + 1;
-            q.push(Point(current.x - 1, current.y, current.cost + 1));
+        // Check horizontal and vertical moves in current layer
+        if (current.x > 0 && cost_grid[current.l][current.x - 1][current.y] == INT_MAX) {
+            cost_grid[current.l][current.x - 1][current.y] = current.cost + 1;
+            q.push(Point(current.l, current.x - 1, current.y, current.cost + 1));
         }
-        if (current.x < cost_grid.size() - 1 && cost_grid[current.x + 1][current.y] == INT_MAX) {
-            cost_grid[current.x + 1][current.y] = current.cost + 1;
-            q.push(Point(current.x + 1, current.y, current.cost + 1));
+        if (current.x < cost_grid[current.l].size() - 1 && cost_grid[current.l][current.x + 1][current.y] == INT_MAX) {
+            cost_grid[current.l][current.x + 1][current.y] = current.cost + 1;
+            q.push(Point(current.l, current.x + 1, current.y, current.cost + 1));
         }
-        if (current.y > 0 && cost_grid[current.x][current.y - 1] == INT_MAX) {
-            cost_grid[current.x][current.y - 1] = current.cost + 2;
-            q.push(Point(current.x, current.y - 1, current.cost + 2));
+        if (current.y > 0 && cost_grid[current.l][current.x][current.y - 1] == INT_MAX) {
+            cost_grid[current.l][current.x][current.y - 1] = current.cost + 2;
+            q.push(Point(current.l, current.x, current.y - 1, current.cost + 2));
         }
-        if (current.y < cost_grid[0].size() - 1 && cost_grid[current.x][current.y + 1] == INT_MAX) {
-            cost_grid[current.x][current.y + 1] = current.cost + 2;
-            q.push(Point(current.x, current.y + 1, current.cost + 2));
+        if (current.y < cost_grid[current.l][current.x].size() - 1 && cost_grid[current.l][current.x][current.y + 1] == INT_MAX) {
+            cost_grid[current.l][current.x][current.y + 1] = current.cost + 2;
+            q.push(Point(current.l, current.x, current.y + 1, current.cost + 2));
+        }
+
+        // Check layer transitions
+        // Move up from layer 0 to layer 1
+        if (current.l == 0 && cost_grid[1][current.x][current.y] == INT_MAX) {
+            cost_grid[1][current.x][current.y] = current.cost + 10;
+            q.push(Point(1, current.x, current.y, current.cost + 10));
+        }
+        // Move down from layer 1 to layer 0
+        if (current.l == 1 && cost_grid[0][current.x][current.y] == INT_MAX) {
+            cost_grid[0][current.x][current.y] = current.cost + 10;
+            q.push(Point(0, current.x, current.y, current.cost + 10));
         }
     }
 
     Point current = dst;
-    while (current.x != src.x || current.y != src.y) {
+    while (current.l != src.l || current.x != src.x || current.y != src.y) {
         // Only mark as route if it's not a pin
-        if (grid[0][current.x][current.y] != 1) {
-            grid[0][current.x][current.y] = 2;
+        if (grid[current.l][current.x][current.y] != 1) {
+            grid[current.l][current.x][current.y] = 2;
             net_name_grid[current.x][current.y] = net_name; // Mark net name for this cell
         }
         int min_cost = INT_MAX;
         Point next = current;
 
-        if (current.x > 0 && cost_grid[current.x - 1][current.y] != -1 && cost_grid[current.x - 1][current.y] < min_cost)
-            next = Point(current.x - 1, current.y, min_cost = cost_grid[current.x - 1][current.y]);
-        if (current.x < cost_grid.size() - 1 && cost_grid[current.x + 1][current.y] != -1 && cost_grid[current.x + 1][current.y] < min_cost)
-            next = Point(current.x + 1, current.y, min_cost = cost_grid[current.x + 1][current.y]);
-        if (current.y > 0 && cost_grid[current.x][current.y - 1] != -1 && cost_grid[current.x][current.y - 1] < min_cost)
-            next = Point(current.x, current.y - 1, min_cost = cost_grid[current.x][current.y - 1]);
-        if (current.y < cost_grid[0].size() - 1 && cost_grid[current.x][current.y + 1] != -1 && cost_grid[current.x][current.y + 1] < min_cost)
-            next = Point(current.x, current.y + 1, min_cost = cost_grid[current.x][current.y + 1]);
+        // Check all possible moves including layer transitions
+        if (current.x > 0 && cost_grid[current.l][current.x - 1][current.y] != -1 && cost_grid[current.l][current.x - 1][current.y] < min_cost)
+            next = Point(current.l, current.x - 1, current.y, min_cost = cost_grid[current.l][current.x - 1][current.y]);
+        if (current.x < cost_grid[current.l].size() - 1 && cost_grid[current.l][current.x + 1][current.y] != -1 && cost_grid[current.l][current.x + 1][current.y] < min_cost)
+            next = Point(current.l, current.x + 1, current.y, min_cost = cost_grid[current.l][current.x + 1][current.y]);
+        if (current.y > 0 && cost_grid[current.l][current.x][current.y - 1] != -1 && cost_grid[current.l][current.x][current.y - 1] < min_cost)
+            next = Point(current.l, current.x, current.y - 1, min_cost = cost_grid[current.l][current.x][current.y - 1]);
+        if (current.y < cost_grid[current.l][current.x].size() - 1 && cost_grid[current.l][current.x][current.y + 1] != -1 && cost_grid[current.l][current.x][current.y + 1] < min_cost)
+            next = Point(current.l, current.x, current.y + 1, min_cost = cost_grid[current.l][current.x][current.y + 1]);
+        
+        // Check layer transitions in backtracking
+        if (current.l == 0 && cost_grid[1][current.x][current.y] != -1 && cost_grid[1][current.x][current.y] < min_cost)
+            next = Point(1, current.x, current.y, min_cost = cost_grid[1][current.x][current.y]);
+        if (current.l == 1 && cost_grid[0][current.x][current.y] != -1 && cost_grid[0][current.x][current.y] < min_cost)
+            next = Point(0, current.x, current.y, min_cost = cost_grid[0][current.x][current.y]);
 
         current = next;
     }
@@ -181,8 +203,8 @@ void route_all_nets() {
 
                 // Only route if both pins are not obstacles
                 if (grid[src_layer][sx][sy] != -1 && grid[dst_layer][dx][dy] != -1) {
-                    Point src_point(sx, sy, 0);
-                    Point dst_point(dx, dy, 0);
+                    Point src_point(src_layer, sx, sy, 0);
+                    Point dst_point(dst_layer, dx, dy, 0);
                     route_net(grid, src_point, dst_point, net_name);
                 } else {
                     cout << "Skipping net segment due to obstacle at pin location.\n";
@@ -193,11 +215,13 @@ void route_all_nets() {
 }
 
 void print_grid() {
-    int layer = 0; // Only print Layer 1
-    for (int i = 0; i < grid[layer].size(); ++i) {
-        for (int j = 0; j < grid[layer][i].size(); ++j) {
-            if (grid[layer][i][j] != 0) {
-                cout << "Layer 1 - Cell (" << i << ", " << j << ") = " << grid[layer][i][j] << endl;
+    // Print both layers
+    for (int layer = 0; layer < 2; ++layer) {
+        for (int i = 0; i < grid[layer].size(); ++i) {
+            for (int j = 0; j < grid[layer][i].size(); ++j) {
+                if (grid[layer][i][j] != 0) {
+                    cout << "Layer " << layer + 1 << " - Cell (" << i << ", " << j << ") = " << grid[layer][i][j] << endl;
+                }
             }
         }
     }
