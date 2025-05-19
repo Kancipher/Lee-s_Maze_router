@@ -10,11 +10,11 @@ parser.add_argument('input_file', help='Path to the input file')
 args = parser.parse_args()
 routing.readfile(args.input_file)
 
-
-
-# routing.readfile("../MS1_TestCases/Testcase1/input.txt")
-grid = routing.get_grid()[0]  # Visualize Layer 1
-net_name_grid = routing.get_net_name_grid()  # 2D array of net names
+# Get both layers from the grid
+grid_layers = routing.get_grid()  # Now we get both layers
+current_layer = 0  # Start with layer 0
+grid = grid_layers[current_layer]  # Current layer to display
+net_name_grid_layers = routing.get_net_name_grid()  # 3D array: [layer][x][y]
 
 cell_size = 40
 rows, cols = len(grid), len(grid[0])
@@ -43,6 +43,7 @@ net_colors = [
     (0, 255, 255),  # Cyan
     (255, 0, 0),    # Red (avoid for pins, but OK for routes if needed)
 ]
+
 def get_net_color(net_name):
     if net_name not in net_color_map:
         net_color_map[net_name] = net_colors[len(net_color_map) % len(net_colors)]
@@ -61,6 +62,23 @@ virtual_surface = pygame.Surface((virtual_width, virtual_height))
 
 # Initial scroll position
 scroll_x, scroll_y = 0, 0
+
+# Layer switcher button properties
+button_width = 100
+button_height = 30
+button_margin = 10
+layer_buttons = [
+    pygame.Rect(button_margin, button_margin, button_width, button_height),
+    pygame.Rect(button_margin + button_width + button_margin, button_margin, button_width, button_height)
+]
+
+def draw_layer_buttons():
+    for i, button in enumerate(layer_buttons):
+        color = (100, 100, 255) if i == current_layer else (200, 200, 200)
+        pygame.draw.rect(screen, color, button)
+        text = font.render(f"Layer {i+1}", True, (0, 0, 0))
+        text_rect = text.get_rect(center=button.center)
+        screen.blit(text, text_rect)
 
 # Main loop
 running = True
@@ -95,13 +113,19 @@ while running:
             elif event.button == 5:  # Scroll down
                 if virtual_height > window_height:
                     scroll_y = min(virtual_height - window_height, scroll_y + cell_size)
+            elif event.button == 1: 
+                for i, button in enumerate(layer_buttons):
+                    if button.collidepoint(event.pos):
+                        current_layer = i
+                        grid = grid_layers[current_layer]
+                        break
 
     # Draw the grid on the virtual surface
     virtual_surface.fill((220, 220, 220))
     for i in range(rows):
         for j in range(cols):
             value = grid[i][j]
-            net_name = net_name_grid[i][j]
+            net_name = net_name_grid_layers[current_layer][i][j]
             if value == 1:
                 color = (255, 0, 0)  # Always red for pins
             elif net_name:
@@ -118,8 +142,12 @@ while running:
                 num = small_font.render(str(j), True, (100, 100, 100))
                 virtual_surface.blit(num, (rect.x + 2, rect.y + 2))
 
-    # Blit the visible part to the screen
-    screen.blit(virtual_surface, (0, 0), area=pygame.Rect(scroll_x, scroll_y, window_width, window_height))
+    # Clear the screen
+    screen.fill((220, 220, 220))
+    draw_layer_buttons()
+    screen.blit(virtual_surface, (0, button_height + 2 * button_margin), 
+                area=pygame.Rect(scroll_x, scroll_y, window_width, window_height - (button_height + 2 * button_margin)))
+    
     pygame.display.flip()
 
 pygame.quit()

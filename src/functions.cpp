@@ -12,7 +12,7 @@ using namespace std;
 vector<vector<vector<int>>> grid;
 vector<vector<tuple<int, int, int>>> all_nets; // Store pins of all nets
 vector<string> net_names; // Store net names in order
-vector<vector<string>> net_name_grid; // Parallel to grid[0], stores net name for each routed cell
+vector<vector<vector<string>>> net_name_grid; // Parallel to grid, stores net name for each routed cell per layer
 
 struct Point {
     int l,x, y;
@@ -150,7 +150,7 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
         // Only mark as route if it's not a pin
         if (grid[current.l][current.x][current.y] != 1) {
             grid[current.l][current.x][current.y] = 2;
-            net_name_grid[current.x][current.y] = net_name; // Mark net name for this cell
+            net_name_grid[current.l][current.x][current.y] = net_name; // Mark net name for this cell and layer
         }
         int min_cost = INT_MAX;
         Point next = current;
@@ -176,8 +176,8 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
 }
 
 void route_all_nets() {
-    // Initialize net_name_grid
-    net_name_grid = vector<vector<string>>(grid[0].size(), vector<string>(grid[0][0].size(), ""));
+    // Initialize net_name_grid for both layers
+    net_name_grid = vector<vector<vector<string>>>(2, vector<vector<string>>(grid[0].size(), vector<string>(grid[0][0].size(), "")));
 
     // First, place all pins from all nets
     for (const auto& net_pins : all_nets) {
@@ -236,13 +236,15 @@ void readfile(string filename) {
     size_t xpos = size.find('x');
     int rows = stoi(size.substr(0, xpos));
     int cols = stoi(size.substr(xpos + 1));
-    grid = vector<vector<vector<int>>>(2, vector<vector<int>>(rows, vector<int>(cols, 0)));
+    // Initialize grid with correct dimensions: 2 layers, rows x cols
+    grid = vector<vector<vector<int>>>(2, vector<vector<int>>(cols, vector<int>(rows, 0)));
+    net_name_grid = vector<vector<vector<string>>>(2, vector<vector<string>>(cols, vector<string>(rows, "")));
 
     while (getline(in, s)) {
         if (starts_with(s, "OBS")) {
             pair<int, int> coords = extract_coords_obstacle(s);
             grid[0][coords.first][coords.second] = -1;
-            // grid[1][coords.first][coords.second] = -1; // Temporarily disabled
+            grid[1][coords.first][coords.second] = -1;  // Enable obstacles on both layers
             cout << s << endl;
         }
         else if (starts_with(s, "net")) {
