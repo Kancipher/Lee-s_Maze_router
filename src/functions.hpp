@@ -1,39 +1,24 @@
-#pragma once
-#ifndef FUNCTIONS_H
-#define FUNCTIONS_H
+// functions.hpp
+#ifndef FUNCTIONS_HPP
+#define FUNCTIONS_HPP
 
-#include <iostream>
-#include <string>
 #include <vector>
 #include <tuple>
-#include <fstream>
+#include <string>
 
-// Define the global 3D grid: grid[layer][x][y]
+// Global data structures
 extern std::vector<std::vector<std::vector<int>>> grid;
-
-// Struct for routing point in the grid
-struct Point {
-    int x, y;
-    int cost;
-    Point(int x, int y, int c);
-};
-
-// Utility functions
-bool starts_with(const std::string& str, const std::string& prefix);
-std::pair<int, int> extract_coords_obstacle(const std::string& line);
-std::tuple<int, int, int> parse_pin(const std::string& pin_str);
-
-// Core parsing and routing functions
-void fill_nets(std::string s);
-void route_net(std::vector<std::vector<std::vector<int>>>& grid);
-void readfile(std::string filename);
-
-// Output/Debugging
-void print_grid();
-void visualize_grid();  // Optional box-style output
-
+extern std::vector<std::vector<std::tuple<int,int,int>>> all_nets;
+extern std::vector<std::string> net_names;
 extern std::vector<std::vector<std::string>> net_name_grid;
+extern std::vector<std::pair<int,int>> obstacle_sequence;
+extern std::vector<std::pair<int,int>> step_sequence;
+extern std::vector<std::pair<int,int>> pin_sequence;
+extern std::vector<std::pair<int,int>> routed_path;  // final routed path only
 
-#endif // FUNCTIONS_H
+// Function declarations
+void readfile(const std::string& fname);
+void route_all_nets();
+void print_grid();
 
-
+#endif // FUNCTIONS_HPP
