@@ -27,6 +27,7 @@ colors = {
     -1: (0, 0, 0),        # Obstacle: Black
      0: (255, 255, 255),  # Empty: White
      1: (255, 0, 0),      # Pin: Red
+     3: (0, 0, 0),        # Via: Black
 }
 
 # Assign a unique color to each net name (different green shades)
@@ -124,16 +125,30 @@ while running:
     virtual_surface.fill((220, 220, 220))
     for i in range(rows):
         for j in range(cols):
+            # Check if this cell is a via in either layer
+            is_via = (grid_layers[0][i][j] == 3) or (grid_layers[1][i][j] == 3)
             value = grid[i][j]
             net_name = net_name_grid_layers[current_layer][i][j]
             if value == 1:
                 color = (255, 0, 0)  # Always red for pins
+            elif is_via:
+                color = (0, 0, 0)  # Black for vias
             elif net_name:
                 color = get_net_color(net_name)
             else:
                 color = colors.get(value, (128, 128, 128))
             rect = pygame.Rect(j * cell_size, i * cell_size, cell_size - 2, cell_size - 2)
             pygame.draw.rect(virtual_surface, color, rect)
+            
+            # Draw X for vias
+            if is_via:
+                pygame.draw.line(virtual_surface, (255, 255, 255), 
+                               (rect.x + 5, rect.y + 5), 
+                               (rect.x + rect.width - 5, rect.y + rect.height - 5), 2)
+                pygame.draw.line(virtual_surface, (255, 255, 255), 
+                               (rect.x + rect.width - 5, rect.y + 5), 
+                               (rect.x + 5, rect.y + rect.height - 5), 2)
+            
             # Draw row/col numbers
             if j == 0:
                 num = small_font.render(str(i), True, (100, 100, 100))

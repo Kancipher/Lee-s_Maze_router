@@ -150,7 +150,7 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
         // Only mark as route if it's not a pin
         if (grid[current.l][current.x][current.y] != 1) {
             grid[current.l][current.x][current.y] = 2;
-            net_name_grid[current.l][current.x][current.y] = net_name; // Mark net name for this cell and layer
+            net_name_grid[current.l][current.x][current.y] = net_name;
         }
         int min_cost = INT_MAX;
         Point next = current;
@@ -170,6 +170,15 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
             next = Point(1, current.x, current.y, min_cost = cost_grid[1][current.x][current.y]);
         if (current.l == 1 && cost_grid[0][current.x][current.y] != -1 && cost_grid[0][current.x][current.y] < min_cost)
             next = Point(0, current.x, current.y, min_cost = cost_grid[0][current.x][current.y]);
+
+        // If we're changing layers, mark both layers with a via
+        if (current.l != next.l) {
+            // Mark via in both layers at this (x, y)
+            for (int l = 0; l < 2; ++l) {
+                grid[l][current.x][current.y] = 3;
+                net_name_grid[l][current.x][current.y] = net_name;
+            }
+        }
 
         current = next;
     }
@@ -219,8 +228,16 @@ void print_grid() {
     for (int layer = 0; layer < 2; ++layer) {
         for (int i = 0; i < grid[layer].size(); ++i) {
             for (int j = 0; j < grid[layer][i].size(); ++j) {
-                if (grid[layer][i][j] != 0) {
-                    cout << "Layer " << layer + 1 << " - Cell (" << i << ", " << j << ") = " << grid[layer][i][j] << endl;
+                // Check if this cell is a via in either layer
+                bool is_via = (grid[0][i][j] == 3) || (grid[1][i][j] == 3);
+                if (grid[layer][i][j] != 0 || is_via) {
+                    std::string value_str;
+                    if (is_via) {
+                        value_str = "X";  // Display X for vias
+                    } else {
+                        value_str = std::to_string(grid[layer][i][j]);
+                    }
+                    cout << "Layer" << layer + 1 << " - Cell (" << i << ", " << j << ") = " << value_str << endl;
                 }
             }
         }
