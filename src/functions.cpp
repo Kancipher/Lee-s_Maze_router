@@ -25,6 +25,12 @@ bool starts_with(const std::string& str, const std::string& prefix) {
     return str.size() >= prefix.size() && str.compare(0, prefix.size(), prefix) == 0;
 }
 
+// Calculate Manhattan distance from (0,0) to a point
+int manhattan_distance(int x, int y) {
+    return x + y;
+}
+
+
 pair<int, int> extract_coords_obstacle(const string& line) {
     size_t start = line.find('(');
     size_t comma = line.find(',', start);
@@ -70,7 +76,14 @@ std::cout << "Net name: " << net_name << std::endl;
             }
         }
     }
-    all_nets.push_back(pins); // Just store pins for later routing
+        sort(pins.begin(), pins.end(), [](const tuple<int, int, int>& a, const tuple<int, int, int>& b) {
+        int dist_a = manhattan_distance(get<1>(a), get<2>(a));
+        int dist_b = manhattan_distance(get<1>(b), get<2>(b));
+        return dist_a < dist_b;
+    });
+
+    all_nets.push_back(pins); 
+
 }
 
 void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const string& net_name) {
@@ -78,14 +91,18 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
     vector<vector<int>> cost_grid = grid[0];
     for (int x = 0; x < cost_grid.size(); ++x) {
         for (int y = 0; y < cost_grid[x].size(); ++y) {
-            if (grid[0][x][y] == 0 || grid[0][x][y] == 1) {
+            if (grid[0][x][y] == 0) {
                 cost_grid[x][y] = INT_MAX;
             }
             else {
-                cost_grid[x][y] = -1; // Block obstacles and other paths
+                cost_grid[x][y] = -1; // Block obstacles, pins, and other paths
             }
         }
     }
+
+    // Mark source and destination as valid for routing
+    cost_grid[src.x][src.y] = INT_MAX;
+    cost_grid[dst.x][dst.y] = INT_MAX;
 
     queue<Point> q;
     q.push(src);
@@ -115,8 +132,11 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
 
     Point current = dst;
     while (current.x != src.x || current.y != src.y) {
-        grid[0][current.x][current.y] = 2;
-        net_name_grid[current.x][current.y] = net_name; // Mark net name for this cell
+        // Only mark as route if it's not a pin
+        if (grid[0][current.x][current.y] != 1) {
+            grid[0][current.x][current.y] = 2;
+            net_name_grid[current.x][current.y] = net_name; // Mark net name for this cell
+        }
         int min_cost = INT_MAX;
         Point next = current;
 
@@ -134,31 +154,23 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
 }
 
 void route_all_nets() {
-    vector<tuple<int, int, int>> all_pins; // Store all start and end pins
-    net_name_grid = vector<vector<string>>(grid[0].size(), vector<string>(grid[0][0].size(), "")); // Reset net_name_grid
+    // Initialize net_name_grid
+    net_name_grid = vector<vector<string>>(grid[0].size(), vector<string>(grid[0][0].size(), ""));
+
+    // First, place all pins from all nets
+    for (const auto& net_pins : all_nets) {
+        for (const auto& pin : net_pins) {
+            int layer = get<0>(pin) - 1;
+            int x = get<1>(pin);
+            int y = get<2>(pin);
+            grid[layer][x][y] = 1;  // Mark as pin
+        }
+    }
+
+    // Now route each net
     for (size_t net_id = 0; net_id < all_nets.size(); ++net_id) {
         const auto& net_pins = all_nets[net_id];
         const string& net_name = net_names[net_id];
-        // Save original pin locations
-        vector<pair<int, int>> other_pins;
-        for (int x = 0; x < grid[0].size(); ++x) {
-            for (int y = 0; y < grid[0][0].size(); ++y) {
-                // If this is a pin and not in the current net, treat as obstacle
-                bool is_in_current_net = false;
-                for (const auto& pin : net_pins) {
-                    int px = get<1>(pin);
-                    int py = get<2>(pin);
-                    if (x == px && y == py) {
-                        is_in_current_net = true;
-                        break;
-                    }
-                }
-                if (grid[0][x][y] == 1 && !is_in_current_net) {
-                    grid[0][x][y] = -1;
-                    other_pins.push_back({x, y});
-                }
-            }
-        }
 
         if (net_pins.size() >= 2) {
             for (size_t i = 0; i < net_pins.size() - 1; ++i) {
@@ -169,10 +181,6 @@ void route_all_nets() {
 
                 // Only route if both pins are not obstacles
                 if (grid[src_layer][sx][sy] != -1 && grid[dst_layer][dx][dy] != -1) {
-                    grid[src_layer][sx][sy] = 1;
-                    grid[dst_layer][dx][dy] = 1;
-                    all_pins.push_back(src);
-                    all_pins.push_back(dst);
                     Point src_point(sx, sy, 0);
                     Point dst_point(dx, dy, 0);
                     route_net(grid, src_point, dst_point, net_name);
@@ -180,27 +188,6 @@ void route_all_nets() {
                     cout << "Skipping net segment due to obstacle at pin location.\n";
                 }
             }
-        }
-
-        // Restore other pins
-        for (const auto& p : other_pins) {
-            grid[0][p.first][p.second] = 1;
-        }
-    }
-
-    for (const auto& pin : all_pins) {
-        int layer = get<0>(pin) - 1;
-        int x = get<1>(pin);
-        int y = get<2>(pin);
-        grid[layer][x][y] = 1;
-    }
-    // Restore all pins for all nets
-    for (const auto& net_pins : all_nets) {
-        for (const auto& pin : net_pins) {
-            int layer = get<0>(pin) - 1;
-            int x = get<1>(pin);
-            int y = get<2>(pin);
-            grid[layer][x][y] = 1;
         }
     }
 }
