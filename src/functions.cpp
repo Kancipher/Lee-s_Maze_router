@@ -52,11 +52,11 @@ tuple<int, int, int> parse_pin(const string& pin_str) {
 }
 
 void fill_nets(string s) {
-size_t paren_pos = s.find('(');
-string net_name = s.substr(0, paren_pos);
-// Remove trailing spaces
-net_name.erase(net_name.find_last_not_of(" \t\r\n") + 1);
-std::cout << "Net name: " << net_name << std::endl;
+    size_t paren_pos = s.find('(');
+    string net_name = s.substr(0, paren_pos);
+    // Remove trailing spaces
+    net_name.erase(net_name.find_last_not_of(" \t\r\n") + 1);
+    std::cout << "Net name: " << net_name << std::endl;
     net_names.push_back(net_name); // Track net name order
 
     stringstream ss(s.substr(s.find('(')));
@@ -76,14 +76,54 @@ std::cout << "Net name: " << net_name << std::endl;
             }
         }
     }
-        sort(pins.begin(), pins.end(), [](const tuple<int, int, int>& a, const tuple<int, int, int>& b) {
-        int dist_a = manhattan_distance(get<1>(a), get<2>(a));
-        int dist_b = manhattan_distance(get<1>(b), get<2>(b));
-        return dist_a < dist_b;
+
+    int rows = grid[0].size();
+    int cols = grid[0][0].size();
+    auto edge_dist = [rows, cols](const tuple<int, int, int>& pin) {
+        int x = get<1>(pin);
+        int y = get<2>(pin);
+        return min({x, y, rows - 1 - x, cols - 1 - y});
+    };
+    auto start_it = min_element(pins.begin(), pins.end(), [&](const auto& a, const auto& b) {
+        return edge_dist(a) < edge_dist(b);
     });
+    if (start_it != pins.begin()) {
+        iter_swap(pins.begin(), start_it);
+    }
+    int start_layer = get<0>(pins[0]);
+    vector<tuple<int, int, int>> same_layer, other_layer;
+    for (size_t i = 1; i < pins.size(); ++i) {
+        if (get<0>(pins[i]) == start_layer)
+            same_layer.push_back(pins[i]);
+        else
+            other_layer.push_back(pins[i]);
+    }
+    // Greedy nearest-neighbor sort within each group
+    auto greedy_sort = [](const tuple<int, int, int>& start, vector<tuple<int, int, int>> group) {
+        vector<tuple<int, int, int>> result;
+        tuple<int, int, int> current = start;
+        while (!group.empty()) {
+            auto nearest_it = min_element(group.begin(), group.end(), [&](const auto& a, const auto& b) {
+                int da = abs(get<1>(a) - get<1>(current)) + abs(get<2>(a) - get<2>(current));
+                int db = abs(get<1>(b) - get<1>(current)) + abs(get<2>(b) - get<2>(current));
+                return da < db;
+            });
+            result.push_back(*nearest_it);
+            current = *nearest_it;
+            group.erase(nearest_it);
+        }
+        return result;
+    };
+    vector<tuple<int, int, int>> sorted_pins = {pins[0]};
+    auto sorted_same_layer = greedy_sort(pins[0], same_layer);
+    sorted_pins.insert(sorted_pins.end(), sorted_same_layer.begin(), sorted_same_layer.end());
+    if (!other_layer.empty()) {
+        auto sorted_other_layer = greedy_sort(sorted_pins.back(), other_layer);
+        sorted_pins.insert(sorted_pins.end(), sorted_other_layer.begin(), sorted_other_layer.end());
+    }
+    pins = sorted_pins;
 
     all_nets.push_back(pins); 
-
 }
 
 void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const string& net_name) {
