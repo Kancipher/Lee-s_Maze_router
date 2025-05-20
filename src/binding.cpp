@@ -14,4 +14,6 @@ PYBIND11_MODULE(routing, m) {
     m.def("get_net_name_grid", []() {
         return net_name_grid;
     }, "Get the net name grid for visualization");
+
+    m.def("set_costs", &set_costs, "Set via and non-preferred direction costs");
 }

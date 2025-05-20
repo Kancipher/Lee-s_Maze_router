@@ -34,6 +34,8 @@ void visualize_grid();  // Optional box-style output
 
 extern std::vector<std::vector<std::vector<std::string>>> net_name_grid;
 
+void set_costs(int via, int nonpref);
+
 #endif // FUNCTIONS_H
 
 

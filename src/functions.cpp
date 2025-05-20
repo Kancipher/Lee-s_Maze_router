@@ -14,6 +14,14 @@ vector<vector<tuple<int, int, int>>> all_nets;
 vector<string> net_names; 
 vector<vector<vector<string>>> net_name_grid; 
 
+// Add global variables and setter for user-supplied costs
+int g_via_cost = 10;
+int g_nonpref_cost = 5;
+void set_costs(int via, int nonpref) {
+    g_via_cost = via;
+    g_nonpref_cost = nonpref;
+}
+
 struct Point {
     int l,x, y;
     int cost;
@@ -158,8 +166,8 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
         if (current.l == dst.l && current.x == dst.x && current.y == dst.y) break;
 
         // Layer-dependent move costs
-        int horiz_cost = (current.l == 0) ? 1 : 2;
-        int vert_cost  = (current.l == 0) ? 2 : 1;
+        int horiz_cost = (current.l == 0) ? 1 : g_nonpref_cost;
+        int vert_cost  = (current.l == 0) ? g_nonpref_cost : 1;
 
         // Check all possible moves
         vector<Point> moves = {
@@ -167,7 +175,7 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
             Point(current.l, current.x + 1, current.y, current.cost + horiz_cost),  // right
             Point(current.l, current.x, current.y - 1, current.cost + vert_cost),   // up
             Point(current.l, current.x, current.y + 1, current.cost + vert_cost),   // down
-            Point(1 - current.l, current.x, current.y, current.cost + 10)           // layer change
+            Point(1 - current.l, current.x, current.y, current.cost + g_via_cost)   // layer change
         };
 
         for (const auto& next : moves) {
@@ -198,8 +206,8 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
             net_name_grid[current.l][current.x][current.y] = net_name;
         }
         bool found = false;
-        int horiz_cost = (current.l == 0) ? 1 : 2;
-        int vert_cost  = (current.l == 0) ? 2 : 1;
+        int horiz_cost = (current.l == 0) ? 1 : g_nonpref_cost;
+        int vert_cost  = (current.l == 0) ? g_nonpref_cost : 1;
         // Check all possible moves and follow the one that matches the cost difference
         // Left
         if (!found && current.x > 0 && cost_grid[current.l][current.x - 1][current.y] != -1) {
@@ -232,7 +240,7 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
         // Via (layer change)
         int other_layer = 1 - current.l;
         if (!found && cost_grid[other_layer][current.x][current.y] != -1) {
-            if (cost_grid[other_layer][current.x][current.y] + 10 == cost_grid[current.l][current.x][current.y]) {
+            if (cost_grid[other_layer][current.x][current.y] + g_via_cost == cost_grid[current.l][current.x][current.y]) {
                 // Mark via on both layers
                 for (int l = 0; l < 2; ++l) {
                     grid[l][current.x][current.y] = 3;
@@ -340,7 +348,7 @@ void print_grid() {
                     } else {
                         value_str = std::to_string(grid[layer][i][j]);
                     }
-                    cout << "Layer" << layer + 1 << " - Cell (" << i << ", " << j << ") = " << value_str << endl;
+                    cout << "LayerNIJJJA" << layer + 1 << " - Cell (" << i << ", " << j << ") = " << value_str << endl;
                 }
             }
         }
