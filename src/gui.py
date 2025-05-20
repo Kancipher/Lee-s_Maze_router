@@ -144,12 +144,11 @@ while running:
             # Draw X for vias
             if is_via:
                 pygame.draw.line(virtual_surface, (255, 255, 255), 
-                               (rect.x + 5, rect.y + 5), 
-                               (rect.x + rect.width - 5, rect.y + rect.height - 5), 2)
+                                 (rect.x + 5, rect.y + 5), 
+                                 (rect.x + rect.width - 5, rect.y + rect.height - 5), 2)
                 pygame.draw.line(virtual_surface, (255, 255, 255), 
-                               (rect.x + rect.width - 5, rect.y + 5), 
-                               (rect.x + 5, rect.y + rect.height - 5), 2)
-            
+                                 (rect.x + rect.width - 5, rect.y + 5), 
+                                 (rect.x + 5, rect.y + rect.height - 5), 2)
             # Draw row/col numbers
             if j == 0:
                 num = small_font.render(str(i), True, (100, 100, 100))
