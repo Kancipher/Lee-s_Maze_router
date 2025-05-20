@@ -16,11 +16,26 @@ current_layer = 0  # Start with layer 0
 grid = grid_layers[current_layer]  # Current layer to display
 net_name_grid_layers = routing.get_net_name_grid()  # 3D array: [layer][x][y]
 
-cell_size = 40
 rows, cols = len(grid), len(grid[0])
+window_width, window_height = 800, 800  # Fixed window size
+base_cell_size = min(window_width // cols, window_height // rows)
+zoom = 1.0
+cell_size = int(base_cell_size * zoom)
 virtual_width, virtual_height = cols * cell_size, rows * cell_size
-window_width, window_height = min(virtual_width, 800), min(virtual_height, 800)
-margin = 5  # Much smaller margin
+
+button_width = 100
+button_height = 30
+button_margin = 10
+layer_buttons = [
+    pygame.Rect(button_margin, button_margin, button_width, button_height),
+    pygame.Rect(button_margin + button_width + button_margin, button_margin, button_width, button_height)
+]
+
+grid_draw_x = 0
+button_area_height = button_height + 2 * button_margin
+grid_draw_y = button_area_height
+grid_draw_width = window_width
+grid_draw_height = window_height - grid_draw_y
 
 # Define colors for cell values
 colors = {
@@ -64,15 +79,6 @@ virtual_surface = pygame.Surface((virtual_width, virtual_height))
 # Initial scroll position
 scroll_x, scroll_y = 0, 0
 
-# Layer switcher button properties
-button_width = 100
-button_height = 30
-button_margin = 10
-layer_buttons = [
-    pygame.Rect(button_margin, button_margin, button_width, button_height),
-    pygame.Rect(button_margin + button_width + button_margin, button_margin, button_width, button_height)
-]
-
 def draw_layer_buttons():
     for i, button in enumerate(layer_buttons):
         color = (100, 100, 255) if i == current_layer else (200, 200, 200)
@@ -80,6 +86,25 @@ def draw_layer_buttons():
         text = font.render(f"Layer {i+1}", True, (0, 0, 0))
         text_rect = text.get_rect(center=button.center)
         screen.blit(text, text_rect)
+
+def clamp_scroll():
+    global scroll_x, scroll_y
+    if virtual_width <= grid_draw_width:
+        scroll_x = 0
+    else:
+        scroll_x = max(0, min(scroll_x, virtual_width - grid_draw_width))
+    if virtual_height <= grid_draw_height:
+        scroll_y = 0
+    else:
+        scroll_y = max(0, min(scroll_y, virtual_height - grid_draw_height))
+
+def update_cell_size():
+    global cell_size, virtual_width, virtual_height, grid_draw_width, grid_draw_height
+    cell_size = max(5, int(base_cell_size * zoom))
+    virtual_width, virtual_height = cols * cell_size, rows * cell_size
+    grid_draw_width = window_width
+    grid_draw_height = window_height - grid_draw_y
+    clamp_scroll()
 
 # Main loop
 running = True
@@ -92,28 +117,38 @@ while running:
                 running = False
             elif event.key == pygame.K_LEFT:
                 scroll_x = max(0, scroll_x - cell_size)
+                clamp_scroll()
             elif event.key == pygame.K_RIGHT:
-                if virtual_width > window_width:
-                    scroll_x = min(virtual_width - window_width, scroll_x + cell_size)
+                scroll_x = min(scroll_x + cell_size, max(0, virtual_width - window_width))
+                clamp_scroll()
             elif event.key == pygame.K_UP:
                 scroll_y = max(0, scroll_y - cell_size)
+                clamp_scroll()
             elif event.key == pygame.K_DOWN:
-                if virtual_height > window_height:
-                    scroll_y = min(virtual_height - window_height, scroll_y + cell_size)
+                scroll_y = min(scroll_y + cell_size, max(0, virtual_height - window_height))
+                clamp_scroll()
             elif event.key == pygame.K_F11:
                 fullscreen = not fullscreen
                 if fullscreen:
                     screen = pygame.display.set_mode((infoObject.current_w, infoObject.current_h), pygame.FULLSCREEN)
                     window_width, window_height = infoObject.current_w, infoObject.current_h
                 else:
-                    window_width, window_height = min(virtual_width, 800), min(virtual_height, 800)
+                    window_width, window_height = 800, 800
                     screen = pygame.display.set_mode((window_width, window_height))
+                update_cell_size()
+            elif event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS:
+                zoom = min(5.0, zoom * 1.1)
+                update_cell_size()
+            elif event.key == pygame.K_MINUS or event.key == pygame.K_UNDERSCORE:
+                zoom = max(0.1, zoom / 1.1)
+                update_cell_size()
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 4:  # Scroll up
-                scroll_y = max(0, scroll_y - cell_size)
-            elif event.button == 5:  # Scroll down
-                if virtual_height > window_height:
-                    scroll_y = min(virtual_height - window_height, scroll_y + cell_size)
+            if event.button == 4:  # Scroll up (zoom in)
+                zoom = min(5.0, zoom * 1.1)
+                update_cell_size()
+            elif event.button == 5:  # Scroll down (zoom out)
+                zoom = max(0.1, zoom / 1.1)
+                update_cell_size()
             elif event.button == 1: 
                 for i, button in enumerate(layer_buttons):
                     if button.collidepoint(event.pos):
@@ -125,23 +160,20 @@ while running:
     virtual_surface.fill((220, 220, 220))
     for i in range(rows):
         for j in range(cols):
-            # Swap i and j to match C++ grid indexing if needed
-            grid_x, grid_y = j, i  # j is x (column), i is y (row)
+            grid_x, grid_y = j, i
             is_via = (grid_layers[0][grid_x][grid_y] == 3) or (grid_layers[1][grid_x][grid_y] == 3)
             value = grid[grid_x][grid_y]
             net_name = net_name_grid_layers[current_layer][grid_x][grid_y]
             if value == 1:
-                color = (255, 0, 0)  # Always red for pins
+                color = (255, 0, 0)
             elif is_via:
-                color = (0, 0, 0)  # Black for vias
+                color = (0, 0, 0)
             elif net_name:
                 color = get_net_color(net_name)
             else:
                 color = colors.get(value, (128, 128, 128))
             rect = pygame.Rect(j * cell_size, i * cell_size, cell_size - 2, cell_size - 2)
             pygame.draw.rect(virtual_surface, color, rect)
-            
-            # Draw X for vias
             if is_via:
                 pygame.draw.line(virtual_surface, (255, 255, 255), 
                                  (rect.x + 5, rect.y + 5), 
@@ -149,7 +181,6 @@ while running:
                 pygame.draw.line(virtual_surface, (255, 255, 255), 
                                  (rect.x + rect.width - 5, rect.y + 5), 
                                  (rect.x + 5, rect.y + rect.height - 5), 2)
-            # Draw row/col numbers
             if j == 0:
                 num = small_font.render(str(i), True, (100, 100, 100))
                 virtual_surface.blit(num, (rect.x + 2, rect.y + 2))
@@ -160,9 +191,18 @@ while running:
     # Clear the screen
     screen.fill((220, 220, 220))
     draw_layer_buttons()
-    screen.blit(virtual_surface, (0, button_height + 2 * button_margin), 
-                area=pygame.Rect(scroll_x, scroll_y, window_width, window_height - (button_height + 2 * button_margin)))
-    
+    visible_width = min(grid_draw_width, virtual_width - scroll_x)
+    visible_height = min(grid_draw_height, virtual_height - scroll_y)
+    screen.blit(
+        virtual_surface,
+        (grid_draw_x, grid_draw_y),
+        area=pygame.Rect(
+            scroll_x,
+            scroll_y,
+            visible_width,
+            visible_height
+        )
+    )
     pygame.display.flip()
 
 pygame.quit()
