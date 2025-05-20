@@ -125,10 +125,11 @@ while running:
     virtual_surface.fill((220, 220, 220))
     for i in range(rows):
         for j in range(cols):
-            # Check if this cell is a via in either layer
-            is_via = (grid_layers[0][i][j] == 3) or (grid_layers[1][i][j] == 3)
-            value = grid[i][j]
-            net_name = net_name_grid_layers[current_layer][i][j]
+            # Swap i and j to match C++ grid indexing if needed
+            grid_x, grid_y = j, i  # j is x (column), i is y (row)
+            is_via = (grid_layers[0][grid_x][grid_y] == 3) or (grid_layers[1][grid_x][grid_y] == 3)
+            value = grid[grid_x][grid_y]
+            net_name = net_name_grid_layers[current_layer][grid_x][grid_y]
             if value == 1:
                 color = (255, 0, 0)  # Always red for pins
             elif is_via:
