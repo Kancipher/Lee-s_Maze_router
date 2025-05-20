@@ -137,91 +137,113 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
     cost_grid[src.l][src.x][src.y] = INT_MAX;
     cost_grid[dst.l][dst.x][dst.y] = INT_MAX;
 
-    queue<Point> q;
-    q.push(src);
+    // Define comparison for priority queue
+    auto compare = [](const Point& a, const Point& b) {
+        return a.cost > b.cost;  // Min heap
+    };
+    priority_queue<Point, vector<Point>, decltype(compare)> pq(compare);
+    
+    // Initialize source
     cost_grid[src.l][src.x][src.y] = 0;
+    pq.push(Point(src.l, src.x, src.y, 0));
 
-    while (!q.empty()) {
-        Point current = q.front(); q.pop();
+    while (!pq.empty()) {
+        Point current = pq.top(); pq.pop();
+        
+        // Skip if we've found a better path to this node
+        if (current.cost > cost_grid[current.l][current.x][current.y]) {
+            continue;
+        }
+
         if (current.l == dst.l && current.x == dst.x && current.y == dst.y) break;
 
         // Layer-dependent move costs
         int horiz_cost = (current.l == 0) ? 1 : 2;
         int vert_cost  = (current.l == 0) ? 2 : 1;
 
-        if (current.x > 0 && cost_grid[current.l][current.x - 1][current.y] == INT_MAX) {
-            cost_grid[current.l][current.x - 1][current.y] = current.cost + horiz_cost;
-            q.push(Point(current.l, current.x - 1, current.y, current.cost + horiz_cost));
-        }
-        if (current.x < cost_grid[current.l].size() - 1 && cost_grid[current.l][current.x + 1][current.y] == INT_MAX) {
-            cost_grid[current.l][current.x + 1][current.y] = current.cost + horiz_cost;
-            q.push(Point(current.l, current.x + 1, current.y, current.cost + horiz_cost));
-        }
-        if (current.y > 0 && cost_grid[current.l][current.x][current.y - 1] == INT_MAX) {
-            cost_grid[current.l][current.x][current.y - 1] = current.cost + vert_cost;
-            q.push(Point(current.l, current.x, current.y - 1, current.cost + vert_cost));
-        }
-        if (current.y < cost_grid[current.l][current.x].size() - 1 && cost_grid[current.l][current.x][current.y + 1] == INT_MAX) {
-            cost_grid[current.l][current.x][current.y + 1] = current.cost + vert_cost;
-            q.push(Point(current.l, current.x, current.y + 1, current.cost + vert_cost));
-        }
+        // Check all possible moves
+        vector<Point> moves = {
+            Point(current.l, current.x - 1, current.y, current.cost + horiz_cost),  // left
+            Point(current.l, current.x + 1, current.y, current.cost + horiz_cost),  // right
+            Point(current.l, current.x, current.y - 1, current.cost + vert_cost),   // up
+            Point(current.l, current.x, current.y + 1, current.cost + vert_cost),   // down
+            Point(1 - current.l, current.x, current.y, current.cost + 10)           // layer change
+        };
 
-        if (current.l == 0 && cost_grid[1][current.x][current.y] == INT_MAX) {
-            cost_grid[1][current.x][current.y] = current.cost + 10;
-            q.push(Point(1, current.x, current.y, current.cost + 10));
-        }
-        if (current.l == 1 && cost_grid[0][current.x][current.y] == INT_MAX) {
-            cost_grid[0][current.x][current.y] = current.cost + 10;
-            q.push(Point(0, current.x, current.y, current.cost + 10));
+        for (const auto& next : moves) {
+            // Skip if out of bounds
+            if (next.x < 0 || next.x >= cost_grid[next.l].size() || 
+                next.y < 0 || next.y >= cost_grid[next.l][next.x].size()) {
+                continue;
+            }
+
+            // Skip if blocked
+            if (cost_grid[next.l][next.x][next.y] == -1) {
+                continue;
+            }
+
+            // If we found a better path
+            if (next.cost < cost_grid[next.l][next.x][next.y]) {
+                cost_grid[next.l][next.x][next.y] = next.cost;
+                pq.push(next);
+            }
         }
     }
 
+    // Rest of the path reconstruction code remains the same
     Point current = dst;
     while (current.l != src.l || current.x != src.x || current.y != src.y) {
         if (grid[current.l][current.x][current.y] != 1) {
             grid[current.l][current.x][current.y] = 2;
             net_name_grid[current.l][current.x][current.y] = net_name;
         }
-        int min_cost = INT_MAX;
-        Point next = current;
-
-        // Layer-dependent move costs
+        bool found = false;
         int horiz_cost = (current.l == 0) ? 1 : 2;
         int vert_cost  = (current.l == 0) ? 2 : 1;
-
-        if (current.x > 0 && cost_grid[current.l][current.x - 1][current.y] != -1) {
-            int cost = cost_grid[current.l][current.x - 1][current.y] + horiz_cost;
-            if (cost_grid[current.l][current.x - 1][current.y] < min_cost)
-                next = Point(current.l, current.x - 1, current.y, min_cost = cost_grid[current.l][current.x - 1][current.y]);
-        }
-        if (current.x < cost_grid[current.l].size() - 1 && cost_grid[current.l][current.x + 1][current.y] != -1) {
-            int cost = cost_grid[current.l][current.x + 1][current.y] + horiz_cost;
-            if (cost_grid[current.l][current.x + 1][current.y] < min_cost)
-                next = Point(current.l, current.x + 1, current.y, min_cost = cost_grid[current.l][current.x + 1][current.y]);
-        }
-        if (current.y > 0 && cost_grid[current.l][current.x][current.y - 1] != -1) {
-            int cost = cost_grid[current.l][current.x][current.y - 1] + vert_cost;
-            if (cost_grid[current.l][current.x][current.y - 1] < min_cost)
-                next = Point(current.l, current.x, current.y - 1, min_cost = cost_grid[current.l][current.x][current.y - 1]);
-        }
-        if (current.y < cost_grid[current.l][current.x].size() - 1 && cost_grid[current.l][current.x][current.y + 1] != -1) {
-            int cost = cost_grid[current.l][current.x][current.y + 1] + vert_cost;
-            if (cost_grid[current.l][current.x][current.y + 1] < min_cost)
-                next = Point(current.l, current.x, current.y + 1, min_cost = cost_grid[current.l][current.x][current.y + 1]);
-        }
-        if (current.l == 0 && cost_grid[1][current.x][current.y] != -1 && cost_grid[1][current.x][current.y] < min_cost)
-            next = Point(1, current.x, current.y, min_cost = cost_grid[1][current.x][current.y]);
-        if (current.l == 1 && cost_grid[0][current.x][current.y] != -1 && cost_grid[0][current.x][current.y] < min_cost)
-            next = Point(0, current.x, current.y, min_cost = cost_grid[0][current.x][current.y]);
-
-        if (current.l != next.l) {
-            for (int l = 0; l < 2; ++l) {
-                grid[l][current.x][current.y] = 3;
-                net_name_grid[l][current.x][current.y] = net_name;
+        // Check all possible moves and follow the one that matches the cost difference
+        // Left
+        if (!found && current.x > 0 && cost_grid[current.l][current.x - 1][current.y] != -1) {
+            if (cost_grid[current.l][current.x - 1][current.y] + horiz_cost == cost_grid[current.l][current.x][current.y]) {
+                current = Point(current.l, current.x - 1, current.y, cost_grid[current.l][current.x - 1][current.y]);
+                found = true;
             }
         }
-
-        current = next;
+        // Right
+        if (!found && current.x < cost_grid[current.l].size() - 1 && cost_grid[current.l][current.x + 1][current.y] != -1) {
+            if (cost_grid[current.l][current.x + 1][current.y] + horiz_cost == cost_grid[current.l][current.x][current.y]) {
+                current = Point(current.l, current.x + 1, current.y, cost_grid[current.l][current.x + 1][current.y]);
+                found = true;
+            }
+        }
+        // Up
+        if (!found && current.y > 0 && cost_grid[current.l][current.x][current.y - 1] != -1) {
+            if (cost_grid[current.l][current.x][current.y - 1] + vert_cost == cost_grid[current.l][current.x][current.y]) {
+                current = Point(current.l, current.x, current.y - 1, cost_grid[current.l][current.x][current.y - 1]);
+                found = true;
+            }
+        }
+        // Down
+        if (!found && current.y < cost_grid[current.l][current.x].size() - 1 && cost_grid[current.l][current.x][current.y + 1] != -1) {
+            if (cost_grid[current.l][current.x][current.y + 1] + vert_cost == cost_grid[current.l][current.x][current.y]) {
+                current = Point(current.l, current.x, current.y + 1, cost_grid[current.l][current.x][current.y + 1]);
+                found = true;
+            }
+        }
+        // Via (layer change)
+        int other_layer = 1 - current.l;
+        if (!found && cost_grid[other_layer][current.x][current.y] != -1) {
+            if (cost_grid[other_layer][current.x][current.y] + 10 == cost_grid[current.l][current.x][current.y]) {
+                // Mark via on both layers
+                for (int l = 0; l < 2; ++l) {
+                    grid[l][current.x][current.y] = 3;
+                    net_name_grid[l][current.x][current.y] = net_name;
+                }
+                current = Point(other_layer, current.x, current.y, cost_grid[other_layer][current.x][current.y]);
+                found = true;
+            }
+        }
+        // If no move found (should not happen), break to avoid infinite loop
+        if (!found) break;
     }
 }
 
