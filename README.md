@@ -63,23 +63,34 @@ net2 (2, 100, 200) (2, 100, 201) (2, 100, 202) ...
    cd Lee-s_Maze_router
    ```
 
-2. Install any required dependencies (if needed):
-   ```
-   # Follow any setup instructions in the repository
+2. Install any required dependencies and build the project:
+   ```bash
+   # Make sure you have Python 3, CMake, and a C++ compiler installed
+   # Initialize submodules (for pybind11)
+   git submodule update --init --recursive
+
+   # Build the Python extension module
+   cd src
+   mkdir -p build
+   cd build
+   cmake -DCMAKE_BUILD_TYPE=Release -DPYTHON_EXECUTABLE=$(which python3) ..
+   make
+
+   # Copy the built .so file to the src directory for Python to use
+   cp routing.cpython-*-darwin.so ../
+   cd ../..
    ```
 
-### Running the Router
+### Running the GUI Router
 
 1. Create an input file using the format described above (e.g., `input.txt`).
 
-2. Run the router with your input file:
+2. Run the GUI with your input file and specify via and direction costs:
+   ```bash
+   cd src
+   python3 gui.py ../tests/Testcase6/input.txt via=500 direction=20
    ```
-   ./maze_router input.txt
-   ```
-
-3. The router will process your input and generate routes for the specified nets.
-
-### Output
-
-The router will output a text file containing the routing results, showing the complete path for each net while avoiding obstacles. The output follows the format described in the Output Format section above.
+   - Replace `via=500` and `direction=29` with your desired costs.
+   - If you do not specify `via=...` or `direction=...`, the defaults are 10 for both.
+   - The GUI will visualize the routing with the specified costs.
 
