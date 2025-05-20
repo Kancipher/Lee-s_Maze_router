@@ -45,25 +45,26 @@ colors = {
      3: (0, 0, 0),        # Via: Black
 }
 
-# Assign a unique color to each net name (different green shades)
-net_color_map = defaultdict(lambda: (0, 255, 0))
-net_colors = [
-    (0, 200, 0),    # Green
-    (0, 120, 255),  # Blue
-    (255, 180, 0),  # Orange
-    (180, 0, 255),  # Purple
-    (0, 255, 180),  # Aqua
-    (255, 0, 120),  # Pink
-    (120, 255, 0),  # Lime
-    (255, 255, 0),  # Yellow
-    (0, 255, 255),  # Cyan
-    (255, 0, 0),    # Red (avoid for pins, but OK for routes if needed)
+# Colors for routes based on routing order
+route_colors = [
+    (0, 200, 0),     # Green (first route)
+    (0, 120, 255),   # Blue
+    (255, 180, 0),   # Orange
+    (180, 0, 255),   # Purple
+    (0, 255, 180),   # Aqua
+    (255, 0, 120),   # Pink
+    (120, 255, 0),   # Lime
+    (255, 255, 0),   # Yellow
+    (0, 255, 255),   # Cyan
+    (255, 0, 0),     # Red
 ]
 
-def get_net_color(net_name):
-    if net_name not in net_color_map:
-        net_color_map[net_name] = net_colors[len(net_color_map) % len(net_colors)]
-    return net_color_map[net_name]
+def get_route_color(order_str):
+    try:
+        order = int(order_str)
+        return route_colors[(order - 1) % len(route_colors)]
+    except ValueError:
+        return (128, 128, 128)  # Gray for invalid order
 
 pygame.init()
 infoObject = pygame.display.Info()
@@ -163,13 +164,13 @@ while running:
             grid_x, grid_y = j, i
             is_via = (grid_layers[0][grid_x][grid_y] == 3) or (grid_layers[1][grid_x][grid_y] == 3)
             value = grid[grid_x][grid_y]
-            net_name = net_name_grid_layers[current_layer][grid_x][grid_y]
+            route_order = net_name_grid_layers[current_layer][grid_x][grid_y]
             if value == 1:
-                color = (255, 0, 0)
+                color = (255, 0, 0)  # Red for pins
             elif is_via:
-                color = (0, 0, 0)
-            elif net_name:
-                color = get_net_color(net_name)
+                color = (0, 0, 0)    # Black for vias
+            elif route_order:
+                color = get_route_color(route_order)  # Color based on routing order
             else:
                 color = colors.get(value, (128, 128, 128))
             rect = pygame.Rect(j * cell_size, i * cell_size, cell_size - 2, cell_size - 2)

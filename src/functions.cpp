@@ -240,7 +240,7 @@ void route_all_nets() {
     }
 
     // --- Net ordering heuristic: bounding box, then total length ---
-    vector<tuple<int, int, int>> net_order; // (bounding_box_size, total_length, net_index)
+    vector<tuple<int, int, int, int>> net_order; // (bounding_box_size, pins_in_bbox, total_length, net_index)
     for (size_t i = 0; i < all_nets.size(); ++i) {
         const auto& pins = all_nets[i];
         int min_x = INT_MAX, max_x = INT_MIN, min_y = INT_MAX, max_y = INT_MIN;
@@ -255,23 +255,36 @@ void route_all_nets() {
         }
         // Bounding box size: (width + height)
         int bbox = (max_x - min_x) + (max_y - min_y);
+        
+        // Count pins inside the bounding box
+        int pins_in_bbox = 0;
+        for (const auto& pin : pins) {
+            int x = get<1>(pin);
+            int y = get<2>(pin);
+            if (x >= min_x && x <= max_x && y >= min_y && y <= max_y) {
+                pins_in_bbox++;
+            }
+        }
+        
         // Total net length: sum of Manhattan distances between consecutive pins
         for (size_t j = 1; j < pins.size(); ++j) {
             int dx = abs(get<1>(pins[j]) - get<1>(pins[j-1]));
             int dy = abs(get<2>(pins[j]) - get<2>(pins[j-1]));
             total_length += dx + dy;
         }
-        net_order.push_back({bbox, total_length, (int)i});
+        net_order.push_back({bbox, pins_in_bbox, total_length, (int)i});
     }
-    // Sort: smaller bbox first, then shorter total length
+    // Sort: smaller bbox first, then fewer pins in bbox, then shorter total length
     sort(net_order.begin(), net_order.end());
     // --- End net ordering heuristic ---
 
     // Now route each net in the chosen order
+    int routing_order = 0;  // Track the order in which nets are routed
     for (const auto& order : net_order) {
-        int net_id = get<2>(order);
+        int net_id = get<3>(order);
         const auto& net_pins = all_nets[net_id];
         const string& net_name = net_names[net_id];
+        routing_order++;  // Increment the routing order counter
 
         if (net_pins.size() >= 2) {
             for (size_t i = 0; i < net_pins.size() - 1; ++i) {
@@ -283,7 +296,8 @@ void route_all_nets() {
                 if (grid[src_layer][sx][sy] != -1 && grid[dst_layer][dx][dy] != -1) {
                     Point src_point(src_layer, sx, sy, 0);
                     Point dst_point(dst_layer, dx, dy, 0);
-                    route_net(grid, src_point, dst_point, net_name);
+                    // Pass routing order instead of net name
+                    route_net(grid, src_point, dst_point, to_string(routing_order));
                 } else {
                     cout << "Skipping net segment due to obstacle at pin location.\n";
                 }
