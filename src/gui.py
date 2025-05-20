@@ -1,224 +1,273 @@
 import routing
 import pygame
-import argparse
 from collections import defaultdict
+import argparse
+import time
 
-parser = argparse.ArgumentParser(description='Routing Simulation')
-parser.add_argument('input_file', help='Path to routing input file')
+parser = argparse.ArgumentParser(description='Routing Grid Simulation & Visualizer')
+parser.add_argument('input_file', help='Path to the input file')
 args = parser.parse_args()
 routing.readfile(args.input_file)
 
-obs_seq   = routing.get_obstacle_sequence()
-pin_seq   = routing.get_pin_sequence()
-net_names = routing.get_net_names()
+grid_layers = routing.get_grid()
+net_name_grid_layers = routing.get_net_name_grid()
 all_steps = routing.get_all_step_sequences()
 all_routes = routing.get_all_routed_paths()
-grid      = routing.get_grid()[0]
-net_map   = routing.get_net_name_grid()
+net_names = routing.get_net_names()
 
-CELL = 40
-rows, cols = len(grid), len(grid[0])
-VW, VH     = cols * CELL, rows * CELL
-GRID_WW, GRID_WH = min(VW, 600), min(VH, 800)
-STAT_WW = 300
-WIN_W, WIN_H = cols * CELL, rows * CELL  # FULL grid size
+rows, cols = len(grid_layers[0][0]), len(grid_layers[0])
+current_layer = 0
 
-GLW, OBW = 2, 4
-EXT = GLW // 2
+window_width, window_height = 800, 800
+base_cell_size = min(window_width // cols, window_height // rows)
+zoom = 1.0
+cell_size = int(base_cell_size * zoom)
+virtual_width, virtual_height = cols * cell_size, rows * cell_size
 
-BG_CLR   = (255,255,255)
-GRID_CLR = (255,204,0)
-OB_CLR   = (128,128,128)
-PIN_CLR  = (255,0,0)
-SRC_CLR  = (255,100,100)
-
-NET_COLORS = [
-    (101, 67, 33),  # brown
-    (50, 90, 168),  # blue
-    (34, 139, 34),  # forest green
-    (218, 112, 214),# orchid
-    (255, 165, 0),  # orange
-    (70, 130, 180), # steel blue
-    (199, 21, 133), # medium violet red
-    (255, 20, 147), # deep pink
-    (0, 206, 209),  # dark turquoise
-    (154, 205, 50)  # yellow green
+button_width = 100
+button_height = 30
+button_margin = 10
+layer_buttons = [
+    pygame.Rect(button_margin, button_margin, button_width, button_height),
+    pygame.Rect(button_margin + button_width + button_margin, button_margin, button_width, button_height)
 ]
 
-pygame.init()
-screen = pygame.display.set_mode((WIN_W, WIN_H))
-pygame.display.set_caption('Maze Router')
-font  = pygame.font.SysFont(None,16)
-clock = pygame.time.Clock()
+grid_draw_x = 0
+button_area_height = button_height + 2 * button_margin
+grid_draw_y = button_area_height
+grid_draw_width = window_width
+grid_draw_height = window_height - grid_draw_y
 
-vs = pygame.Surface((VW, VH))
-scroll_x = scroll_y = 0
+colors = {-1: (0, 0, 0), 0: (255, 255, 255), 1: (255, 0, 0), 3: (0, 0, 0)}
+
+route_colors = [
+    (0, 200, 0), (0, 120, 255), (255, 180, 0), (180, 0, 255),
+    (0, 255, 180), (255, 0, 120), (120, 255, 0), (255, 255, 0),
+    (0, 255, 255), (255, 0, 0),
+]
+
+def get_route_color(order_str):
+    try:
+        order = int(order_str)
+        return route_colors[(order - 1) % len(route_colors)]
+    except ValueError:
+        return (128, 128, 128)
+
+pygame.init()
+screen = pygame.display.set_mode((window_width, window_height))
+pygame.display.set_caption("Routing Grid Viewer & Simulator")
+font = pygame.font.SysFont(None, 24)
+small_font = pygame.font.SysFont(None, 16)
+virtual_surface = pygame.Surface((virtual_width, virtual_height))
+scroll_x, scroll_y = 0, 0
+infoObject = pygame.display.Info()
+fullscreen = False
+
+step_index = 0
+route_index = 0
+net_index = 0
+phase = 'BFS'
+bfs_seq, trace_seq = [], []
+bfs_done = set()
+trace_done = set()
+show_static = False
+
+route_seq = all_routes[net_index]
+steps = all_steps[net_index]
+split = next((i for i in range(len(steps)-1) if steps[i] == steps[i+1]), len(steps)-1)
+bfs_seq = steps[:split]
+trace_seq = steps[split+1:]
+
+# Detect via cells
+via_cells = {(x, y) for x in range(cols) for y in range(rows)
+             if grid_layers[0][x][y] == 3 or grid_layers[1][x][y] == 3}
+
+clock = pygame.time.Clock()
 running = True
 
-phase   = 0
-start_t = pygame.time.get_ticks()
-bfs_i = trace_i = route_i = 0
-
-bfs_seq = []
-trace_seq = []
-route_seq = []
-
-final_obstacles = set((x, y) for x, y in obs_seq)
-bfs_done_cells = set()
-trace_done_cells = set()
-route_done_cells = defaultdict(set)
-
-net_index = 0
-net_color_map = {}
-
-def get_net_color(name):
-    if name not in net_color_map:
-        idx = len(net_color_map) % len(NET_COLORS)
-        net_color_map[name] = NET_COLORS[idx]
-    return net_color_map[name]
-
-def load_net(index):
-    global bfs_seq, trace_seq, route_seq, bfs_i, trace_i, route_i
-    bfs_done_cells.clear()
-    trace_done_cells.clear()
-    steps = all_steps[index]
-    route_seq = all_routes[index]
-    split = next((i for i in range(len(steps)-1) if steps[i] == steps[i+1]), len(steps)-1)
-    bfs_seq = steps[:split]
-    trace_seq = steps[split+1:]
-    bfs_i = trace_i = route_i = 0
-
-load_net(net_index)
-
 while running:
-    for ev in pygame.event.get():
-        if ev.type == pygame.QUIT:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
             running = False
-        elif ev.type == pygame.KEYDOWN:
-            if ev.key in (pygame.K_ESCAPE, pygame.K_q):
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
                 running = False
-            elif ev.key == pygame.K_SPACE and phase == 5:
-                phase = 0
-                start_t = pygame.time.get_ticks()
-                bfs_done_cells.clear()
-                trace_done_cells.clear()
-                route_done_cells.clear()
-                final_obstacles.clear()
-                final_obstacles.update(obs_seq)
-                net_index = 0
-                load_net(net_index)
-            elif ev.key == pygame.K_LEFT:
-                scroll_x = max(0, scroll_x - CELL)
-            elif ev.key == pygame.K_RIGHT:
-                scroll_x = min(VW - GRID_WW, scroll_x + CELL)
-            elif ev.key == pygame.K_UP:
-                scroll_y = max(0, scroll_y - CELL)
-            elif ev.key == pygame.K_DOWN:
-                scroll_y = min(VH - GRID_WH, scroll_y + CELL)
-            elif ev.key == pygame.K_F11:
-                fs = screen.get_flags() & pygame.FULLSCREEN
-                screen = pygame.display.set_mode((WIN_W, WIN_H), pygame.FULLSCREEN if not fs else 0)
+            elif event.key == pygame.K_s:
+                show_static = not show_static
+            elif event.key == pygame.K_l:
+                current_layer = 1 - current_layer
+            elif event.key == pygame.K_LEFT:
+                scroll_x = max(0, scroll_x - cell_size)
+            elif event.key == pygame.K_RIGHT:
+                scroll_x = min(scroll_x + cell_size, max(0, virtual_width - window_width))
+            elif event.key == pygame.K_UP:
+                scroll_y = max(0, scroll_y - cell_size)
+            elif event.key == pygame.K_DOWN:
+                scroll_y = min(scroll_y + cell_size, max(0, virtual_height - window_height))
+            elif event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS:
+                zoom = min(5.0, zoom * 1.1)
+                cell_size = max(5, int(base_cell_size * zoom))
+                virtual_width, virtual_height = cols * cell_size, rows * cell_size
+                virtual_surface = pygame.Surface((virtual_width, virtual_height))
+            elif event.key == pygame.K_MINUS or event.key == pygame.K_UNDERSCORE:
+                zoom = max(0.1, zoom / 1.1)
+                cell_size = max(5, int(base_cell_size * zoom))
+                virtual_width, virtual_height = cols * cell_size, rows * cell_size
+                virtual_surface = pygame.Surface((virtual_width, virtual_height))
+            elif event.key == pygame.K_F11:
+                fullscreen = not fullscreen
+                if fullscreen:
+                    screen = pygame.display.set_mode((infoObject.current_w, infoObject.current_h), pygame.FULLSCREEN)
+                    window_width, window_height = infoObject.current_w, infoObject.current_h
+                else:
+                    window_width, window_height = 800, 800
+                    screen = pygame.display.set_mode((window_width, window_height))
+                base_cell_size = min(window_width // cols, window_height // rows)
+                cell_size = max(5, int(base_cell_size * zoom))
+                virtual_width, virtual_height = cols * cell_size, rows * cell_size
+                virtual_surface = pygame.Surface((virtual_width, virtual_height))
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                for i, button in enumerate(layer_buttons):
+                    if button.collidepoint(event.pos):
+                        current_layer = i
+            elif event.button == 4:
+                zoom = min(5.0, zoom * 1.1)
+                cell_size = max(5, int(base_cell_size * zoom))
+                virtual_width, virtual_height = cols * cell_size, rows * cell_size
+                virtual_surface = pygame.Surface((virtual_width, virtual_height))
+            elif event.button == 5:
+                zoom = max(0.1, zoom / 1.1)
+                cell_size = max(5, int(base_cell_size * zoom))
+                virtual_width, virtual_height = cols * cell_size, rows * cell_size
+                virtual_surface = pygame.Surface((virtual_width, virtual_height))
 
-    vs.fill(BG_CLR)
-    for x in range(cols + 1):
-        pygame.draw.line(vs, GRID_CLR, (x * CELL, 0), (x * CELL, VH), GLW)
-    for y in range(rows + 1):
-        pygame.draw.line(vs, GRID_CLR, (0, y * CELL), (VW, y * CELL), GLW)
+    virtual_surface.fill((220, 220, 220))
 
-    for x in range(rows):
-        for y in range(cols):
-            if (x, y) in final_obstacles:
-                pygame.draw.rect(vs, OB_CLR, (y * CELL, x * CELL, CELL, CELL))
-    for i, (x, y) in enumerate(pin_seq):
-        clr = SRC_CLR if i == 0 else PIN_CLR
-        pygame.draw.rect(vs, clr, pygame.Rect(y * CELL - EXT, x * CELL - EXT, CELL + 2 * EXT, CELL + 2 * EXT))
+    for x in range(cols):
+        for y in range(rows):
+            val = grid_layers[current_layer][x][y]
+            net = net_name_grid_layers[current_layer][x][y]
+            is_via = (grid_layers[0][x][y] == 3 or grid_layers[1][x][y] == 3)
+            rect = pygame.Rect(x * cell_size, y * cell_size, cell_size - 2, cell_size - 2)
 
-    now = pygame.time.get_ticks()
-    if phase == 0 and now - start_t > 1000:
-        phase = 1
+            if val == 1:
+                color = (255, 0, 0)
+            elif is_via:
+                color = (0, 0, 0)
+            elif show_static and net:
+                color = get_route_color(net)
+            elif phase == 'DONE' and net:  # Final static rendering
+                color = get_route_color(net)
+            elif phase == 'DONE' and net:
+                color = get_route_color(net)  # Show each net with its original color
+            elif not show_static and (x, y) in route_seq[:route_index] and phase == 'ROUTE':
+                color = get_route_color(str(net_index + 1))  # During animation
+            elif val == 5 and show_static:
+                color = (150, 150, 150)  # Optional: static toggle
+            elif val == 5:
+                color = (255, 255, 255)  # Hide routed path unless done or toggled
 
-    if phase >= 1:
-        for x, y in bfs_done_cells:
-            if (x, y) not in pin_seq:
-                r = pygame.Rect(y * CELL + 2, x * CELL + 2, CELL - 4, CELL - 4)
-                pygame.draw.rect(vs, (255, 255, 255), r)
-                pygame.draw.rect(vs, (0, 200, 0), r, 2)
+            else:
+                color = colors.get(val, (255, 255, 255))
 
-    if phase == 1:
-        if bfs_i < len(bfs_seq):
-            x, y = bfs_seq[bfs_i]
-            bfs_done_cells.add((x, y))
-            bfs_i += 1
-            clock.tick(5)
-        else:
-            phase = 2
+            pygame.draw.rect(virtual_surface, color, rect)
 
-    if phase >= 2:
-        for x, y in trace_done_cells:
-            if (x, y) not in pin_seq:
-                r = pygame.Rect(y * CELL, x * CELL, CELL, CELL)
-                pygame.draw.rect(vs, (255, 255, 255), r)
-                pygame.draw.rect(vs, (0, 200, 0), r, width=GLW)  # Use same thickness as yellow lines
+            if is_via:
+                pygame.draw.line(virtual_surface, (255, 255, 255), (rect.x + 5, rect.y + 5),
+                                 (rect.x + rect.width - 5, rect.y + rect.height - 5), 2)
+                pygame.draw.line(virtual_surface, (255, 255, 255), (rect.x + rect.width - 5, rect.y + 5),
+                                 (rect.x + 5, rect.y + rect.height - 5), 2)
 
-    if phase == 2:
-        if trace_i < len(trace_seq):
-            x, y = trace_seq[trace_i]
-            trace_done_cells.add((x, y))
+            if x == 0:
+                label = small_font.render(str(y), True, (100, 100, 100))
+                virtual_surface.blit(label, (rect.x + 2, rect.y + 2))
+            if y == 0:
+                label = small_font.render(str(x), True, (100, 100, 100))
+                virtual_surface.blit(label, (rect.x + 2, rect.y + 2))
 
-            # If reaching a pin, temporarily shade it green
-            if (x, y) in pin_seq:
-                pygame.draw.rect(vs, (0, 255, 0), (y * CELL, x * CELL, CELL, CELL))
-                screen.blit(vs, (0, 0), pygame.Rect(scroll_x, scroll_y, WIN_W, WIN_H))
-                pygame.display.flip()
-                pygame.time.delay(300)  # pause for 300 ms
+    if not show_static:
+        for x, y in bfs_done:
+            r = pygame.Rect(x * cell_size, y * cell_size, cell_size, cell_size)
+            color = get_route_color(str(net_index + 1))
+            pygame.draw.rect(virtual_surface, color, r, 2)
 
-            trace_i += 1
-            clock.tick(5)
-        else:
-            phase = 3
+        if phase == 'BFS':
+            if step_index < len(bfs_seq):
+                step = bfs_seq[step_index]
+                if step in via_cells:
+                    current_layer = 1 - current_layer
+                bfs_done.add(step)
+                step_index += 1
+            else:
+                phase = 'TRACE'
+                step_index = 0
+                time.sleep(0.3)
 
-    if phase == 3:
-        route_i = 0
-        phase = 4
+        for x, y in trace_done:
+            r = pygame.Rect(x * cell_size, y * cell_size, cell_size, cell_size)
+            color = get_route_color(str(net_index + 1))
+            pygame.draw.rect(virtual_surface, color, r, 2)
 
-    if phase >= 4:
-        for name, cells in route_done_cells.items():
-            color = get_net_color(name)
-            for x, y in cells:
-                pygame.draw.rect(vs, color, (y * CELL, x * CELL, CELL, CELL))
+        if phase == 'TRACE':
+            if step_index < len(trace_seq):
+                step = trace_seq[step_index]
+                if step in via_cells:
+                    current_layer = 1 - current_layer
+                trace_done.add(step)
+                step_index += 1
+            else:
+                phase = 'ROUTE'
+                route_index = 0
+                time.sleep(0.3)
 
-    if phase == 4:
-        if route_i < len(route_seq):
-            x, y = route_seq[route_i]
-            netname = net_map[x][y]
-            route_done_cells[netname].add((x, y))
-            route_i += 1
-            clock.tick(5)
-        else:
-            phase = 5
+        if phase == 'ROUTE':
+            if route_index < len(route_seq):
+                step = route_seq[route_index]
+                if step in via_cells:
+                    current_layer = 1 - current_layer
+                route_index += 1
+            else:
+                time.sleep(0.5)
+                net_index += 1
+                if net_index < len(all_steps):
+                    steps = all_steps[net_index]
+                    route_seq = all_routes[net_index]
+                    split = next((i for i in range(len(steps) - 1) if steps[i] == steps[i + 1]), len(steps) - 1)
+                    bfs_seq = steps[:split]
+                    trace_seq = steps[split + 1:]
+                    bfs_done.clear()
+                    trace_done.clear()
+                    step_index = 0
+                    route_index = 0
+                    phase = 'BFS'
+                else:
+                    phase = 'DONE'
 
-    if phase == 5:
-        for name, cells in route_done_cells.items():
-            for x, y in cells:
-                final_obstacles.add((x, y))
-        route_done_cells.clear()
-        net_index += 1
-        if net_index < len(all_steps):
-            load_net(net_index)
-            phase = 0
-            start_t = pygame.time.get_ticks()
-        else:
-            phase = 6
+    for x in range(cols):
+        for y in range(rows):
+            if grid_layers[current_layer][x][y] == -1:
+                rect = pygame.Rect(x * cell_size, y * cell_size, cell_size - 2, cell_size - 2)
+                pygame.draw.rect(virtual_surface, (0, 0, 0), rect)
 
-    pygame.draw.rect(vs, GRID_CLR, (0, 0, VW, VH), OBW)
-    for i in range(rows):
-        vs.blit(font.render(str(i), True, (100, 100, 100)), (2, i * CELL + 2))
-    for j in range(cols):
-        vs.blit(font.render(str(j), True, (100, 100, 100)), (j * CELL + 2, 2))
+    screen.fill((220, 220, 220))
+    for i, button in enumerate(layer_buttons):
+        color = (100, 100, 255) if i == current_layer else (200, 200, 200)
+        pygame.draw.rect(screen, color, button)
+        text = font.render(f"Layer {i+1}", True, (0, 0, 0))
+        screen.blit(text, text.get_rect(center=button.center))
 
-    screen.fill(BG_CLR)
-    screen.blit(vs, (0, 0), pygame.Rect(scroll_x, scroll_y, WIN_W, WIN_H))
+    screen.blit(
+        virtual_surface,
+        (grid_draw_x, grid_draw_y),
+        area=pygame.Rect(scroll_x, scroll_y, min(grid_draw_width, virtual_width - scroll_x), min(grid_draw_height, virtual_height - scroll_y))
+    )
+
+    mode_text = "Static View (S to toggle)" if show_static else f"Phase: {phase} | Net: {net_index + 1}/{len(all_steps)}"
+    label = font.render(mode_text, True, (0, 0, 0))
+    screen.blit(label, (window_width // 2 - 100, 5))
 
     pygame.display.flip()
+    clock.tick(10)
 
 pygame.quit()
