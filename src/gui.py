@@ -7,6 +7,7 @@ import argparse
 
 parser = argparse.ArgumentParser(description='Visualize routing grid from input file')
 parser.add_argument('input_file', help='Path to the input file')
+parser.add_argument('output_file', help='Path to the output file')
 parser.add_argument('via', type=str, nargs='?', default='via=10', help='Via cost, e.g., via=10')
 parser.add_argument('direction', type=str, nargs='?', default='direction=5', help='Non-preferred direction cost, e.g., direction=5')
 args = parser.parse_args()
@@ -26,7 +27,7 @@ if args.direction.startswith('direction='):
         pass
 
 routing.set_costs(via_cost, nonpref_cost)
-routing.readfile(args.input_file)
+routing.readfile(args.input_file, args.output_file)
 
 # Get both layers from the grid
 grid_layers = routing.get_grid()  # Now we get both layers

@@ -13,10 +13,12 @@ vector<vector<vector<int>>> grid;
 vector<vector<tuple<int, int, int>>> all_nets; 
 vector<string> net_names; 
 vector<vector<vector<string>>> net_name_grid; 
+// Add global variable to store path order
+vector<vector<tuple<int, int, int>>> net_paths;  // For each net, store its path in order
 
 // Add global variables and setter for user-supplied costs
 int g_via_cost = 10;
-int g_nonpref_cost = 5;
+int g_nonpref_cost = 10;
 void set_costs(int via, int nonpref) {
     g_via_cost = via;
     g_nonpref_cost = nonpref;
@@ -198,12 +200,14 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
         }
     }
 
-    // Rest of the path reconstruction code remains the same
+    // Track the path in order
+    vector<tuple<int, int, int>> path;
     Point current = dst;
     while (current.l != src.l || current.x != src.x || current.y != src.y) {
         if (grid[current.l][current.x][current.y] != 1) {
             grid[current.l][current.x][current.y] = 2;
             net_name_grid[current.l][current.x][current.y] = net_name;
+            path.push_back({current.l + 1, current.x, current.y});  // Store path in order
         }
         bool found = false;
         int horiz_cost = (current.l == 0) ? 1 : g_nonpref_cost;
@@ -246,6 +250,8 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
                     grid[l][current.x][current.y] = 3;
                     net_name_grid[l][current.x][current.y] = net_name;
                 }
+                path.push_back({current.l + 1, current.x, current.y});  // Store current layer
+                path.push_back({other_layer + 1, current.x, current.y});  // Store via layer
                 current = Point(other_layer, current.x, current.y, cost_grid[other_layer][current.x][current.y]);
                 found = true;
             }
@@ -253,11 +259,15 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
         // If no move found (should not happen), break to avoid infinite loop
         if (!found) break;
     }
+    // Store the complete path for this net
+    net_paths.push_back(path);
 }
 
 void route_all_nets() {
     // Initialize net_name_grid for both layers
     net_name_grid = vector<vector<vector<string>>>(2, vector<vector<string>>(grid[0].size(), vector<string>(grid[0][0].size(), "")));
+    // Clear previous paths
+    net_paths.clear();
 
     // First, place all pins from all nets
     for (const auto& net_pins : all_nets) {
@@ -336,27 +346,25 @@ void route_all_nets() {
     }
 }
 
-void print_grid() {
-    for (int layer = 0; layer < 2; ++layer) {
-        for (int i = 0; i < grid[layer].size(); ++i) {
-            for (int j = 0; j < grid[layer][i].size(); ++j) {
-                bool is_via = (grid[0][i][j] == 3) || (grid[1][i][j] == 3);
-                if (grid[layer][i][j] != 0 || is_via) {
-                    std::string value_str;
-                    if (is_via) {
-                        value_str = "X";  
-                    } else {
-                        value_str = std::to_string(grid[layer][i][j]);
-                    }
-                    cout << "LayerNIJJJA" << layer + 1 << " - Cell (" << i << ", " << j << ") = " << value_str << endl;
-                }
+void print_grid(string output_filename) {
+    ofstream out(output_filename);
+    
+    // Output each net's path in the order it was routed
+    for (size_t net_idx = 0; net_idx < net_names.size(); ++net_idx) {
+        const string& net_name = net_names[net_idx];
+        if (net_idx < net_paths.size() && !net_paths[net_idx].empty()) {
+            out << net_name;
+            for (const auto& cell : net_paths[net_idx]) {
+                out << " (" << get<0>(cell) << "," << get<1>(cell) << "," << get<2>(cell) << ")";
             }
+            out << endl;
         }
     }
+    out.close();
 }
 
-void readfile(string filename) {
-    ifstream in(filename);
+void readfile(string input_filename, string output_filename) {
+    ifstream in(input_filename);
     string s;
 
     string size;
@@ -378,6 +386,7 @@ void readfile(string filename) {
         }
     }
     route_all_nets();
-    print_grid();
+    print_grid(output_filename);
     in.close();
 }
+

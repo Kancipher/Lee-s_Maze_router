@@ -26,10 +26,10 @@ std::tuple<int, int, int> parse_pin(const std::string& pin_str);
 // Core parsing and routing functions
 void fill_nets(std::string s);
 void route_net(std::vector<std::vector<std::vector<int>>>& grid);
-void readfile(std::string filename);
+void readfile(std::string input_filename, std::string output_filename);
 
 // Output/Debugging
-void print_grid();
+void print_grid(std::string output_filename);
 void visualize_grid();  // Optional box-style output
 
 extern std::vector<std::vector<std::vector<std::string>>> net_name_grid;
