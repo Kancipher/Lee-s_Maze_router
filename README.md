@@ -85,12 +85,12 @@ net2 (2, 100, 200) (2, 100, 201) (2, 100, 202) ...
 
 1. Create an input file using the format described above (e.g., `input.txt`).
 
-2. Run the GUI with your input file and specify via and direction costs:
+2. Run the GUI with your input file, output file, and specify via and direction costs:
    ```bash
    cd src
-   python3 gui.py ../tests/Testcase6/input.txt via=500 direction=20
+   python3 gui.py ../tests/Testcase6/input.txt ../tests/Testcase6/output.txt via=500 direction=20
    ```
-   - Replace `via=500` and `direction=29` with your desired costs.
+   - Replace `via=500` and `direction=20` with your desired costs.
    - If you do not specify `via=...` or `direction=...`, the defaults are 10 for both.
    - The GUI will visualize the routing with the specified costs.
 
