@@ -6,6 +6,7 @@
 #include <queue>
 #include <tuple>
 #include <climits>
+#include <algorithm>
 using namespace std;
 
 vector<vector<vector<int>>> grid;
@@ -225,18 +226,50 @@ void route_net(vector<vector<vector<int>>>& grid, Point src, Point dst, const st
 }
 
 void route_all_nets() {
+    // Initialize net_name_grid for both layers
     net_name_grid = vector<vector<vector<string>>>(2, vector<vector<string>>(grid[0].size(), vector<string>(grid[0][0].size(), "")));
 
+    // First, place all pins from all nets
     for (const auto& net_pins : all_nets) {
         for (const auto& pin : net_pins) {
             int layer = get<0>(pin) - 1;
             int x = get<1>(pin);
             int y = get<2>(pin);
-            grid[layer][x][y] = 1; 
+            grid[layer][x][y] = 1;
         }
     }
 
-    for (size_t net_id = 0; net_id < all_nets.size(); ++net_id) {
+    // --- Net ordering heuristic: bounding box, then total length ---
+    vector<tuple<int, int, int>> net_order; // (bounding_box_size, total_length, net_index)
+    for (size_t i = 0; i < all_nets.size(); ++i) {
+        const auto& pins = all_nets[i];
+        int min_x = INT_MAX, max_x = INT_MIN, min_y = INT_MAX, max_y = INT_MIN;
+        int total_length = 0;
+        for (const auto& pin : pins) {
+            int x = get<1>(pin);
+            int y = get<2>(pin);
+            min_x = min(min_x, x);
+            max_x = max(max_x, x);
+            min_y = min(min_y, y);
+            max_y = max(max_y, y);
+        }
+        // Bounding box size: (width + height)
+        int bbox = (max_x - min_x) + (max_y - min_y);
+        // Total net length: sum of Manhattan distances between consecutive pins
+        for (size_t j = 1; j < pins.size(); ++j) {
+            int dx = abs(get<1>(pins[j]) - get<1>(pins[j-1]));
+            int dy = abs(get<2>(pins[j]) - get<2>(pins[j-1]));
+            total_length += dx + dy;
+        }
+        net_order.push_back({bbox, total_length, (int)i});
+    }
+    // Sort: smaller bbox first, then shorter total length
+    sort(net_order.begin(), net_order.end());
+    // --- End net ordering heuristic ---
+
+    // Now route each net in the chosen order
+    for (const auto& order : net_order) {
+        int net_id = get<2>(order);
         const auto& net_pins = all_nets[net_id];
         const string& net_name = net_names[net_id];
 
