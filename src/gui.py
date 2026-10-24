@@ -1,228 +1,102 @@
-import routing
-import pygame
-from collections import defaultdict
-from collections import deque
-import sys
+"""Bounded viewport for the native two-layer router. Importing has no side effects."""
 import argparse
+import sys
 
-parser = argparse.ArgumentParser(description='Visualize routing grid from input file')
-parser.add_argument('input_file', help='Path to the input file')
-parser.add_argument('output_file', help='Path to the output file')
-parser.add_argument('via', type=str, nargs='?', default='via=10', help='Via cost, e.g., via=10')
-parser.add_argument('direction', type=str, nargs='?', default='direction=5', help='Non-preferred direction cost, e.g., direction=5')
-args = parser.parse_args()
 
-# Parse via and direction costs
-via_cost = 10
-nonpref_cost = 10
-if args.via.startswith('via='):
+def render(screen, pygame, layers, names, layer, cell, scroll):
+    screen.fill((230, 233, 239))
+    width, height = screen.get_size()
+    font = pygame.font.Font(None, 24)
+    screen.blit(font.render(f"Layer {layer+1} | L/click: layer | arrows: pan | +/-: zoom | Q: quit", True, (20, 25, 35)), (10, 12))
+    palette = [(30, 150, 80), (40, 110, 215), (170, 80, 190), (215, 145, 30)]
+    cols, rows = len(layers[layer]), len(layers[layer][0])
+    sx, sy = scroll
+    # Draw only the visible region; never allocate a grid-sized virtual surface.
+    screen.set_clip(pygame.Rect(0, 45, width, height-45))
+    for x in range(sx//cell, min(cols, (sx+width)//cell+1)):
+        for y in range(sy//cell, min(rows, (sy+height-45)//cell+1)):
+            value, owner = layers[layer][x][y], names[layer][x][y]
+            color = (250, 250, 250)
+            if owner:
+                color = palette[(int(owner)-1) % len(palette)]
+            if value == -1:
+                color = (35, 40, 50)
+            elif value == 1:
+                color = (220, 45, 60)
+            elif value == 3:
+                color = (15, 15, 20)
+            rect = pygame.Rect(x*cell-sx, y*cell-sy+45, max(1, cell-1), max(1, cell-1))
+            pygame.draw.rect(screen, color, rect)
+            if value == 3 and cell >= 8:
+                pygame.draw.circle(screen, (255, 255, 255), rect.center, max(1, cell//5), 1)
+    screen.set_clip(None)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('input_file')
+    parser.add_argument('output_file', help='Must not already exist')
+    parser.add_argument('via', nargs='?', default='via=10')
+    parser.add_argument('direction', nargs='?', default='direction=10')
+    parser.add_argument('--screenshot', help='Render one frame to this PNG and exit')
+    args = parser.parse_args(argv)
     try:
-        via_cost = int(args.via.split('=')[1])
-    except Exception:
-        pass
-if args.direction.startswith('direction='):
+        def cost(value, key):
+            prefix, value = value.split('=', 1)
+            if prefix != key or not value.isdigit() or not 1 <= int(value) <= 1000000:
+                raise ValueError(f'{key} must be 1..1000000')
+            return int(value)
+        import routing
+        routing.set_costs(cost(args.via, 'via'), cost(args.direction, 'direction'))
+        routing.readfile(args.input_file, args.output_file)
+        layers, names = routing.get_grid(), routing.get_net_name_grid()
+        results = routing.get_results()
+    except (ImportError, ValueError, RuntimeError, OSError) as error:
+        parser.exit(1, f'Error: {error}\n')
+    import pygame
+    pygame.init()
     try:
-        nonpref_cost = int(args.direction.split('=')[1])
-    except Exception:
-        pass
+        screen = pygame.display.set_mode((900, 650), pygame.RESIZABLE)
+        pygame.display.set_caption("Lee's Maze Router")
+        cols, rows = len(layers[0]), len(layers[0][0])
+        cell, layer, sx, sy = max(2, min(40, 900//cols, 600//rows)), 0, 0, 0
+        clock = pygame.time.Clock()
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and event.pos[1] < 45:
+                    layer = 1-layer
+                elif event.type == pygame.KEYDOWN:
+                    if event.key in (pygame.K_ESCAPE, pygame.K_q):
+                        running = False
+                    elif event.key == pygame.K_l:
+                        layer = 1-layer
+                    elif event.key in (pygame.K_PLUS, pygame.K_EQUALS):
+                        cell = min(80, cell+2)
+                    elif event.key == pygame.K_MINUS:
+                        cell = max(2, cell-2)
+                    elif event.key == pygame.K_RIGHT:
+                        sx += cell*4
+                    elif event.key == pygame.K_LEFT:
+                        sx -= cell*4
+                    elif event.key == pygame.K_DOWN:
+                        sy += cell*4
+                    elif event.key == pygame.K_UP:
+                        sy -= cell*4
+            w, h = screen.get_size()
+            sx, sy = max(0, min(sx, cols*cell-w)), max(0, min(sy, rows*cell-(h-45)))
+            render(screen, pygame, layers, names, layer, cell, (sx, sy))
+            pygame.display.flip()
+            if args.screenshot:
+                pygame.image.save(screen, args.screenshot)
+                break
+            clock.tick(30)
+    finally:
+        pygame.quit()
+    return 0 if all(r['routed'] for r in results) else 2
 
-routing.set_costs(via_cost, nonpref_cost)
-routing.readfile(args.input_file, args.output_file)
 
-# Get both layers from the grid
-grid_layers = routing.get_grid()  # Now we get both layers
-current_layer = 0  # Start with layer 0
-grid = grid_layers[current_layer]  # Current layer to display
-net_name_grid_layers = routing.get_net_name_grid()  # 3D array: [layer][x][y]
-
-rows, cols = len(grid), len(grid[0])
-window_width, window_height = 800, 800  # Fixed window size
-base_cell_size = min(window_width // cols, window_height // rows)
-zoom = 1.0
-cell_size = int(base_cell_size * zoom)
-virtual_width, virtual_height = cols * cell_size, rows * cell_size
-
-button_width = 100
-button_height = 30
-button_margin = 10
-layer_buttons = [
-    pygame.Rect(button_margin, button_margin, button_width, button_height),
-    pygame.Rect(button_margin + button_width + button_margin, button_margin, button_width, button_height)
-]
-
-grid_draw_x = 0
-button_area_height = button_height + 2 * button_margin
-grid_draw_y = button_area_height
-grid_draw_width = window_width
-grid_draw_height = window_height - grid_draw_y
-
-# Define colors for cell values
-colors = {
-    -1: (0, 0, 0),        # Obstacle: Black
-     0: (255, 255, 255),  # Empty: White
-     1: (255, 0, 0),      # Pin: Red
-     3: (0, 0, 0),        # Via: Black
-}
-
-# Colors for routes based on routing order
-route_colors = [
-    (0, 200, 0),     # Green (first route)
-    (0, 120, 255),   # Blue
-    (255, 180, 0),   # Orange
-    (180, 0, 255),   # Purple
-    (0, 255, 180),   # Aqua
-    (255, 0, 120),   # Pink
-    (120, 255, 0),   # Lime
-    (255, 255, 0),   # Yellow
-    (0, 255, 255),   # Cyan
-    (255, 0, 0),     # Red
-]
-
-def get_route_color(order_str):
-    try:
-        order = int(order_str)
-        return route_colors[(order - 1) % len(route_colors)]
-    except ValueError:
-        return (128, 128, 128)  # Gray for invalid order
-
-pygame.init()
-infoObject = pygame.display.Info()
-fullscreen = False
-screen = pygame.display.set_mode((window_width, window_height))
-pygame.display.set_caption("Routing Grid Visualizer")
-font = pygame.font.SysFont(None, 24)
-small_font = pygame.font.SysFont(None, 16)
-
-# Create a virtual surface for the whole grid
-virtual_surface = pygame.Surface((virtual_width, virtual_height))
-
-# Initial scroll position
-scroll_x, scroll_y = 0, 0
-
-def draw_layer_buttons():
-    for i, button in enumerate(layer_buttons):
-        color = (100, 100, 255) if i == current_layer else (200, 200, 200)
-        pygame.draw.rect(screen, color, button)
-        text = font.render(f"Layer {i+1}", True, (0, 0, 0))
-        text_rect = text.get_rect(center=button.center)
-        screen.blit(text, text_rect)
-
-def clamp_scroll():
-    global scroll_x, scroll_y
-    if virtual_width <= grid_draw_width:
-        scroll_x = 0
-    else:
-        scroll_x = max(0, min(scroll_x, virtual_width - grid_draw_width))
-    if virtual_height <= grid_draw_height:
-        scroll_y = 0
-    else:
-        scroll_y = max(0, min(scroll_y, virtual_height - grid_draw_height))
-
-def update_cell_size():
-    global cell_size, virtual_width, virtual_height, grid_draw_width, grid_draw_height
-    cell_size = max(5, int(base_cell_size * zoom))
-    virtual_width, virtual_height = cols * cell_size, rows * cell_size
-    grid_draw_width = window_width
-    grid_draw_height = window_height - grid_draw_y
-    clamp_scroll()
-
-# Main loop
-running = True
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE or event.key == pygame.K_q:
-                running = False
-            elif event.key == pygame.K_LEFT:
-                scroll_x = max(0, scroll_x - cell_size)
-                clamp_scroll()
-            elif event.key == pygame.K_RIGHT:
-                scroll_x = min(scroll_x + cell_size, max(0, virtual_width - window_width))
-                clamp_scroll()
-            elif event.key == pygame.K_UP:
-                scroll_y = max(0, scroll_y - cell_size)
-                clamp_scroll()
-            elif event.key == pygame.K_DOWN:
-                scroll_y = min(scroll_y + cell_size, max(0, virtual_height - window_height))
-                clamp_scroll()
-            elif event.key == pygame.K_F11:
-                fullscreen = not fullscreen
-                if fullscreen:
-                    screen = pygame.display.set_mode((infoObject.current_w, infoObject.current_h), pygame.FULLSCREEN)
-                    window_width, window_height = infoObject.current_w, infoObject.current_h
-                else:
-                    window_width, window_height = 800, 800
-                    screen = pygame.display.set_mode((window_width, window_height))
-                update_cell_size()
-            elif event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS:
-                zoom = min(5.0, zoom * 1.1)
-                update_cell_size()
-            elif event.key == pygame.K_MINUS or event.key == pygame.K_UNDERSCORE:
-                zoom = max(0.1, zoom / 1.1)
-                update_cell_size()
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 4:  # Scroll up (zoom in)
-                zoom = min(5.0, zoom * 1.1)
-                update_cell_size()
-            elif event.button == 5:  # Scroll down (zoom out)
-                zoom = max(0.1, zoom / 1.1)
-                update_cell_size()
-            elif event.button == 1: 
-                for i, button in enumerate(layer_buttons):
-                    if button.collidepoint(event.pos):
-                        current_layer = i
-                        grid = grid_layers[current_layer]
-                        break
-
-    # Draw the grid on the virtual surface
-    virtual_surface.fill((220, 220, 220))
-    for i in range(rows):
-        for j in range(cols):
-            grid_x, grid_y = j, i
-            is_via = (grid_layers[0][grid_x][grid_y] == 3) or (grid_layers[1][grid_x][grid_y] == 3)
-            value = grid[grid_x][grid_y]
-            route_order = net_name_grid_layers[current_layer][grid_x][grid_y]
-            if value == 1:
-                color = (255, 0, 0)  # Red for pins
-            elif is_via:
-                color = (0, 0, 0)    # Black for vias
-            elif route_order:
-                color = get_route_color(route_order)  # Color based on routing order
-            else:
-                color = colors.get(value, (128, 128, 128))
-            rect = pygame.Rect(j * cell_size, i * cell_size, cell_size - 2, cell_size - 2)
-            pygame.draw.rect(virtual_surface, color, rect)
-            if is_via:
-                pygame.draw.line(virtual_surface, (255, 255, 255), 
-                                 (rect.x + 5, rect.y + 5), 
-                                 (rect.x + rect.width - 5, rect.y + rect.height - 5), 2)
-                pygame.draw.line(virtual_surface, (255, 255, 255), 
-                                 (rect.x + rect.width - 5, rect.y + 5), 
-                                 (rect.x + 5, rect.y + rect.height - 5), 2)
-            if j == 0:
-                num = small_font.render(str(i), True, (100, 100, 100))
-                virtual_surface.blit(num, (rect.x + 2, rect.y + 2))
-            if i == 0:
-                num = small_font.render(str(j), True, (100, 100, 100))
-                virtual_surface.blit(num, (rect.x + 2, rect.y + 2))
-
-    # Clear the screen
-    screen.fill((220, 220, 220))
-    draw_layer_buttons()
-    visible_width = min(grid_draw_width, virtual_width - scroll_x)
-    visible_height = min(grid_draw_height, virtual_height - scroll_y)
-    screen.blit(
-        virtual_surface,
-        (grid_draw_x, grid_draw_y),
-        area=pygame.Rect(
-            scroll_x,
-            scroll_y,
-            visible_width,
-            visible_height
-        )
-    )
-    pygame.display.flip()
-
-pygame.quit()
+if __name__ == '__main__':
+    sys.exit(main())
