@@ -54,6 +54,7 @@ Linux, g++ 13.3, Python 3.12.14, CMake installed from PyPI, pybind11 3.1.0 and P
 | LeakSanitizer | Could not run: environment denied `/proc` inspection; no leak-free claim |
 | Extension state/rollback tests | Passed: 2 methods |
 | Pygame rectangular screenshot mode | Passed; actual image in `docs/demo.png` |
+| Hosted Ubuntu native, ASan/UBSan and Python/GUI CI | Passed on GitHub Actions |
 | Nine historical input fixtures | All accepted; 2 and 8 each had one unreachable net; others routed completely |
 
 The original output fixtures were not used as test oracles or replaced with self-generated expected answers. The single-net oracle checks optimal weighted cost, connectedness, bounds, obstacle avoidance and endpoint inclusion. Multipin/multinet tests check important properties; they do not prove global optimality. Interactive keyboard/fullscreen behavior, Windows/macOS builds and production-scale performance have not been fully verified here. CI status must be checked on the pull request separately; local passing checks are not hosted CI results.
