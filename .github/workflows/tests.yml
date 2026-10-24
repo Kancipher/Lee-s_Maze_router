@@ -1,0 +1,27 @@
+name: Native routing and GUI regressions
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        sanitize: ['OFF', 'ON']
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=${{ matrix.sanitize }}
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-gui.txt
+      - run: cmake -S . -B build -DBUILD_PYTHON=ON -Dpybind11_DIR=$(python -m pybind11 --cmakedir)
+      - run: cmake --build build --parallel 2
+      - run: PYTHONPATH=build python tests/test_binding.py
+      - run: PYTHONPATH=build SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy python src/gui.py tests/rectangular.txt /tmp/gui-route.txt --screenshot /tmp/router.png

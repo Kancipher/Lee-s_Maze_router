@@ -1,19 +1,22 @@
+#include "functions.hpp"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include "functions.hpp"
-
 namespace py = pybind11;
-
 PYBIND11_MODULE(routing, m) {
-    m.def("readfile", &readfile, "Read input file and run routing");
-
-    m.def("get_grid", []() {
-        return grid;
-    }, "Get the current routing grid");
-
-    m.def("get_net_name_grid", []() {
-        return net_name_grid;
-    }, "Get the net name grid for visualization");
-
-    m.def("set_costs", &set_costs, "Set via and non-preferred direction costs");
+  m.def("readfile", &readfile);
+  m.def("set_costs", &set_costs);
+  m.def("get_grid", []() { return grid; });
+  m.def("get_net_name_grid", []() { return net_name_grid; });
+  m.def("get_results", []() {
+    py::list out;
+    for (const auto &r : route_results) {
+      py::dict d;
+      d["name"] = r.name;
+      d["routed"] = r.routed;
+      d["cost"] = r.cost;
+      d["cells"] = r.cells;
+      out.append(d);
+    }
+    return out;
+  });
 }
