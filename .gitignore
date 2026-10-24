@@ -51,3 +51,9 @@ Thumbs.db
 *.log
 
 src/main
+# Additional CMake build trees and local demo exports
+build-*/
+.venv/
+route-result.txt
+gui-result.txt
+screenshot-route.txt
