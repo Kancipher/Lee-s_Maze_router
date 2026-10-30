@@ -1,0 +1,8 @@
+$ ./build/maze-router tests/rectangular.txt build/presentation-rectangular.txt 10 10
+netA: ROUTED cost=51 cells=25
+netB: ROUTED cost=23 cells=6
+Exit status: 0
+$ ./build/maze-router tests/Testcase2/input.txt build/presentation-unroutable.txt 10 10
+net0: UNROUTABLE cost=0 cells=0
+net2: ROUTED cost=39 cells=22
+Exit status: 2
